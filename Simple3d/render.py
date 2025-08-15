@@ -1,12 +1,13 @@
 
 import instance
 import math
-camera = instance.instance(0.5,0.75,-1)
-points = []
-scale = 1000
 import turtle
 from turtle import *
 
+
+camera = instance.instance(0.5,0.75,-1)
+points = []
+scale = 1000
 screen = turtle.Screen()
 my_turtle = turtle.Turtle()
 my_turtle.penup()
@@ -58,6 +59,5 @@ def calculateScreenCoord(x,y,z):
          return "NaN","NaN"
     x *= (nearplane * ((1 / (aspect*math.tan(math.radians(fov/2)))))) / z 
     y *= (nearplane * ((1/math.tan(fov/2))))/z
-    print(y)
     return x,y
     
