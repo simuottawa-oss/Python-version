@@ -56,7 +56,7 @@ def initRender(filename):
 def calculateScreenCoord(x,y,z):
 
     nearplane = camera.getZ()  + 0.1
-    farplane = nearplane + 10
+
     w = 1
     aspect = 20
     
