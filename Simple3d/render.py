@@ -1,16 +1,20 @@
-
 import instance
 import math
-import turtle
-from turtle import *
+import tkinter as tk
+from tkinter import *
 
 
 camera = instance.instance(0.5,0.75,-1)
 points = []
 scale = 1000
-screen = turtle.Screen()
-my_turtle = turtle.Turtle()
-my_turtle.penup()
+
+root = tk.Tk()
+root.title("Object Renderer")
+canvas = tk.Canvas(root,height = 1000, width = 1000)
+canvas.pack()
+
+canvas_middle_width = int(canvas['width'])/2
+canvas_middle_height = int(canvas['height'])/2
 
 def initRender(filename):
         
@@ -19,7 +23,7 @@ def initRender(filename):
         i = 0
         for line in lines:
             coordinates = line.split()
-            if coordinates[0] == "v":
+            if coordinates and coordinates[0] == "v":
                 x = float(coordinates[1]) + camera.getX()
                 y = float(coordinates[2]) -  camera.getY()
                 z = float(coordinates[3])
@@ -30,21 +34,24 @@ def initRender(filename):
                 if screen_x != "NaN":
                     screen_x*=scale
                     screen_y*=scale
+                    point.setScreenCoords(screen_x, screen_y)
 
+                    centered_x = canvas_middle_width+screen_x
+                    centered_y = canvas_middle_height-screen_y
 
-                    point.setScreenCoords(screen_x,screen_y)
-                    my_turtle.hideturtle()
-                    my_turtle.goto(screen_x, screen_y)
-                    my_turtle.dot(10,"blue")
-            if coordinates[0] == "l":
+                    radius = 5
+                    circle = canvas.create_oval(centered_x-radius, centered_y+radius, centered_x+radius, centered_y-radius, fill="blue")
+
+            if coordinates and coordinates[0] == "l":
                 pointOne = int(coordinates[1])
                 pointTwo = int(coordinates[2])
+
+                centered_x1 = canvas_middle_width+points[pointOne].getScreenX()
+                centered_y1 = canvas_middle_height-points[pointOne].getScreenY()
+                centered_x2 = canvas_middle_width+points[pointTwo].getScreenX()
+                centered_y2 = canvas_middle_height-points[pointTwo].getScreenY()
                 
-                my_turtle.penup()
-                my_turtle.teleport(points[pointOne].getScreenX(),points[pointOne].getScreenY()) 
-                my_turtle.pendown()
-                
-                my_turtle.goto(points[pointTwo].getScreenX(),points[pointTwo].getScreenY())
+                line = canvas.create_line(centered_x1, centered_y1, centered_x2, centered_y2, fill = "white")
                 
 def calculateScreenCoord(x,y,z):
 

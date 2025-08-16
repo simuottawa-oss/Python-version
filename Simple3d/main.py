@@ -19,8 +19,6 @@ def newWindow():
     # Button to add file
     fileSelect = tk.Button(root, text="Select File", command=open_file)
     fileSelect.place(relx=0.5,rely=0.5,anchor=tk.CENTER)
-
-
     
     # Run and exit
     root.mainloop()
@@ -34,6 +32,5 @@ def open_file():
         print(f"Selected file: {filename}")
         
         rd.initRender(filename)
-
 
 newWindow()
