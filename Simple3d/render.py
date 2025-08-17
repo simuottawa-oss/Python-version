@@ -6,6 +6,7 @@ from tkinter import *
 
 camera = instance.instance(0.5,0.75,-1)
 points = []
+linesD = []
 scale = 1000
 
 root = tk.Tk()
@@ -16,8 +17,8 @@ canvas.pack()
 canvas_middle_width = int(canvas['width'])/2
 canvas_middle_height = int(canvas['height'])/2
 
+
 def initRender(filename):
-        
         lines = open(filename)
 
         i = 0
@@ -45,6 +46,8 @@ def initRender(filename):
             if coordinates and coordinates[0] == "l":
                 pointOne = int(coordinates[1])
                 pointTwo = int(coordinates[2])
+                lineD = (pointOne,pointTwo)
+                linesD.append(lineD)
 
                 centered_x1 = canvas_middle_width+points[pointOne].getScreenX()
                 centered_y1 = canvas_middle_height-points[pointOne].getScreenY()
@@ -67,4 +70,56 @@ def calculateScreenCoord(x,y,z):
     x *= (nearplane * ((1 / (aspect*math.tan(math.radians(fov/2)))))) / z 
     y *= (nearplane * ((1/math.tan(fov/2))))/z
     return x,y
+
+def moveCamera(event):
+    step = 1
+    if event.keysym == 'w':
+         camera.setZ(camera.getZ() + step)
+         reDraw()
+    elif event.keysym == 's':
+         camera.setZ(camera.getZ() - step)
+         reDraw()
+    elif event.keysym == 'a':
+         camera.setX(camera.getX() - step)
+         reDraw()
+    elif event.keysym == 'd':
+         camera.setX(camera.getX() + step)
+         reDraw()
+    elif event.keysym == 'Up':
+         camera.setY(camera.getY() + step)
+         reDraw()
+    elif event.keysym == 'Down':
+         camera.setY(camera.getY() - step)
+         reDraw()
+
+def reDraw():
+    canvas.delete("all")
+    for point in points:
+        x = point.getX() - camera.getX()
+        y = point.getY() - camera.getY()
+        z = point.getZ() - camera.getZ()
+
+        screen_x, screen_y = calculateScreenCoord(x,y,z)
+
+        screen_x*=scale
+        screen_y*=scale
+        point.setScreenCoords(screen_x, screen_y)
+
+        centered_x = canvas_middle_width+screen_x
+        centered_y = canvas_middle_height-screen_y
+
+        radius = 5
+        circle = canvas.create_oval(centered_x-radius, centered_y+radius, centered_x+radius, centered_y-radius, fill="blue")
+    
+    for line in linesD:
+        centered_x1 = canvas_middle_width+points[line[0]].getScreenX()
+        centered_y1 = canvas_middle_height-points[line[0]].getScreenY()
+        centered_x2 = canvas_middle_width+points[line[1]].getScreenX()
+        centered_y2 = canvas_middle_height-points[line[1]].getScreenY()
+                
+        line = canvas.create_line(centered_x1, centered_y1, centered_x2, centered_y2, fill = "white")
+         
+     
+
+root.bind("<Key>", moveCamera)
     
