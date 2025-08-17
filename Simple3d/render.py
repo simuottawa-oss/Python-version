@@ -32,29 +32,13 @@ def initRender(filename):
                 point = instance.instance(x,y,z)
 
                 points.append(point)
-                if screen_x != "NaN":
-                    screen_x*=scale
-                    screen_y*=scale
-                    point.setScreenCoords(screen_x, screen_y)
-
-                    centered_x = canvas_middle_width+screen_x
-                    centered_y = canvas_middle_height-screen_y
-
-                    radius = 5
-                    circle = canvas.create_oval(centered_x-radius, centered_y+radius, centered_x+radius, centered_y-radius, fill="blue")
 
             if coordinates and coordinates[0] == "l":
                 pointOne = int(coordinates[1])
                 pointTwo = int(coordinates[2])
                 lineD = (pointOne,pointTwo)
                 linesD.append(lineD)
-
-                centered_x1 = canvas_middle_width+points[pointOne].getScreenX()
-                centered_y1 = canvas_middle_height-points[pointOne].getScreenY()
-                centered_x2 = canvas_middle_width+points[pointTwo].getScreenX()
-                centered_y2 = canvas_middle_height-points[pointTwo].getScreenY()
-                
-                line = canvas.create_line(centered_x1, centered_y1, centered_x2, centered_y2, fill = "white")
+            reDraw()
                 
 def calculateScreenCoord(x,y,z):
 
@@ -85,10 +69,10 @@ def moveCamera(event):
     elif event.keysym == 'd':
          camera.setX(camera.getX() + step)
          reDraw()
-    elif event.keysym == 'Up':
+    elif event.keysym == 'q':
          camera.setY(camera.getY() - step)
          reDraw()
-    elif event.keysym == 'Down':
+    elif event.keysym == 'e':
          camera.setY(camera.getY() + step)
          reDraw()
 
