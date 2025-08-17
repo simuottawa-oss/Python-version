@@ -72,7 +72,7 @@ def calculateScreenCoord(x,y,z):
     return x,y
 
 def moveCamera(event):
-    step = 1
+    step = 0.1
     if event.keysym == 'w':
          camera.setZ(camera.getZ() + step)
          reDraw()
@@ -86,10 +86,10 @@ def moveCamera(event):
          camera.setX(camera.getX() + step)
          reDraw()
     elif event.keysym == 'Up':
-         camera.setY(camera.getY() + step)
+         camera.setY(camera.getY() - step)
          reDraw()
     elif event.keysym == 'Down':
-         camera.setY(camera.getY() - step)
+         camera.setY(camera.getY() + step)
          reDraw()
 
 def reDraw():
