@@ -42,6 +42,7 @@ def calculateScreenCoord(x,y,z):
     nearplane = camera.getZ()  + 0.1
 
 
+
     w = 1
     aspect = 20
     
