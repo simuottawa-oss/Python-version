@@ -42,14 +42,14 @@ def calculateScreenCoord(x,y,z):
     nearplane = camera.getZ()  + 0.1
 
     w = 1
-    aspect = 20
+    aspect = 5
     
     fov = 60
     z -= nearplane
     if (z == 0):
          return "NaN","NaN"
-    x *= (nearplane * ((1 / (aspect*math.tan(math.radians(fov/2)))))) / z 
-    y *= (nearplane * ((1/math.tan(fov/2))))/z
+    x *= (nearplane/ aspect*math.tan(math.radians(fov/2))) / (1 + nearplane/z) 
+    y *= (nearplane/math.tan(fov/2))/(1 + nearplane/z)
     return x,y
 
 def moveCamera(event):
