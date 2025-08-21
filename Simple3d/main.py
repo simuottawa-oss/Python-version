@@ -10,7 +10,7 @@ def newWindow():
     # Root
     root = tk.Tk()
     root.title("3d areodynamics simulator")
-    root.geometry("1000x1000") 
+    root.geometry("800x600") 
     
     # Button to quit
     quit = tk.Button(root, text="Quit", command=root.destroy)
