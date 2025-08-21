@@ -1,4 +1,4 @@
-'''import instance
+import instance
 import math
 import tkinter as tk
 from tkinter import *
@@ -100,8 +100,8 @@ def calculateScreenCoord(x,y,z):
      
          
 
-THRU 114 SUPPOSED TO BE COMMENTED
-     nearplane = camera.getZ()  + 0.1
+
+     '''nearplane = camera.getZ()  + 0.1
 
      aspect = 20
     
@@ -111,7 +111,7 @@ THRU 114 SUPPOSED TO BE COMMENTED
        return "NaN","NaN"
      x *= (nearplane * ((1 / (aspect*math.tan(math.radians(fov/2)))))) / z 
      y *= (nearplane * ((1/math.tan(fov/2))))/z
-     return x,y
+     return x,y'''
 
 def moveCamera(event):
     step = 0.1
@@ -142,35 +142,35 @@ def reDraw():
         y = point.getY()
         z = point.getZ()
 
-        THRU 149 SUPPOSED TO BE COMMENTED
+        '''
         x = point.getX() - camera.getX()
         y = point.getY() - camera.getY()
         z = point.getZ() - camera.getZ()
-        
+        '''
 
         screen_x, screen_y = calculateScreenCoord(x,y,z)
 
         point.setScreenCoords(screen_x, screen_y)
 
-        THRU 161 SUPPOSED TO BE COMMENTED
+        '''
         screen_x*=scale
         screen_y*=scale
 
         centered_x = canvas_middle_width + screen_x
         centered_y = canvas_middle_height - screen_y
-        
+        '''
         
         radius = 5
 
         canvas.create_oval(screen_x-radius, screen_y-radius, screen_x+radius, screen_y+radius, fill="blue")
     
     for line in edges:
-        THRU 173 SUPPOSED TO BE COMMENTED
+        '''
         centered_x1 = canvas_middle_width+points[line[0]].getScreenX()
         centered_y1 = canvas_middle_height-points[line[0]].getScreenY()
         centered_x2 = canvas_middle_width+points[line[1]].getScreenX()
         centered_y2 = canvas_middle_height-points[line[1]].getScreenY()
-        
+        '''
         centered_x1 = points[line[0]].getScreenX()
         centered_y1 = points[line[0]].getScreenY()
         centered_x2 = points[line[1]].getScreenX()
@@ -181,4 +181,3 @@ def reDraw():
          
      
 root.bind("<Key>", moveCamera)
-'''
