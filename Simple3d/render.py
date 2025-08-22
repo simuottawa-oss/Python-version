@@ -56,20 +56,20 @@ def initRender(filename):
 
           elif coordinates and coordinates[0] == "f":
                face = []
-               for tripleVertice in coordinates[1:]:
-                    vertices = tripleVertice.split("/")
-                    if vertices[0] != "":
-                         v = int(vertices[0])
+               for vertexTriplet in coordinates[1:]:
+                    vertexIndices = vertexTriplet.split("/")
+                    if vertexIndices[0] != "":
+                         v = int(vertexIndices[0])
                     else:
                          v = None
 
-                    if len(vertices) > 1 and vertices[1] != "":
-                         vt = int(vertices[1]) 
+                    if len(vertexIndices) > 1 and vertexIndices[1] != "":
+                         vt = int(vertexIndices[1]) 
                     else:
                          vt = None
 
-                    if len(vertices) > 2 and vertices[2] != "":
-                         vn = int(vertices[2]) 
+                    if len(vertexIndices) > 2 and vertexIndices[2] != "":
+                         vn = int(vertexIndices[2]) 
                     else:
                          vn = None
 
@@ -145,25 +145,25 @@ def reDraw():
           screenPoints = []
           texturePoints = []
 
-          for triplet in face:
+          for vertexTriplet in face:
                
-               if triplet[0] is not None:
-                    vertex = points[triplet[0]]
+               if vertexTriplet[0] is not None:
+                    vertex = points[vertexTriplet[0]]
                     screenPoints.append(canvas_middle_width+vertex.getScreenX())
                     screenPoints.append(canvas_middle_height-vertex.getScreenY())
                
                # Currently doesn't do anything
-               if triplet[1] is not None:
-                    (u, v) = textureCoordinates[triplet[1]]
+               if vertexTriplet[1] is not None:
+                    (u, v) = textureCoordinates[vertexTriplet[1]]
                     texturePoints.append((u, v))
                
                # Currently doesn't do anything
-               if triplet[2] is not None:
-                    (x, y, z) = normals[triplet[2]]
+               if vertexTriplet[2] is not None:
+                    (x, y, z) = normals[vertexTriplet[2]]
 
 
           if len(screenPoints) > 2:
-               canvas.create_polygon(screenPoints, outline="white", fill = "gray", stipple="gray25")
+               canvas.create_polygon(screenPoints, outline="white", fill = "gray")
 
 
 root.bind("<Key>", moveCamera)
