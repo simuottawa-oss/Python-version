@@ -5,8 +5,14 @@ from tkinter import *
 
 
 camera = instance.instance(0.5,0.75,-1)
+
 points = []
 edges = []
+objects = []
+faces = []
+textureCoordinates = []
+normals = []
+
 scale = 1000
 
 root = tk.Tk()
@@ -30,11 +36,46 @@ def initRender(filename):
                point = instance.instance(x,y,z)
                points.append(point)
 
-          if coordinates and coordinates[0] == "l":
+          elif coordinates and coordinates[0] == "l":
                pointOne = int(coordinates[1])
                pointTwo = int(coordinates[2])
                edge = (pointOne,pointTwo)
                edges.append(edge)
+
+          elif coordinates and coordinates[0] == "o":
+               objects.append(' '.join(coordinates[1:]))
+
+          elif coordinates and coordinates[0] == "vt":
+               textureCoordinates.append((float(coordinates[1]), float(coordinates[2])))
+
+          elif coordinates and coordinates[0] == "vn":
+               x = float(coordinates[1])
+               y = float(coordinates[2])
+               z = float(coordinates[3])
+               normals.append((x,y,z))
+
+          elif coordinates and coordinates[0] == "f":
+               face = []
+               for tripleVertice in coordinates[1:]:
+                    vertices = tripleVertice.split("/")
+                    if vertices[0] != "":
+                         v = int(vertices[0])
+                    else:
+                         v = None
+
+                    if len(vertices) > 1 and vertices[1] != "":
+                         vt = int(vertices[1]) 
+                    else:
+                         vt = None
+
+                    if len(vertices) > 2 and vertices[2] != "":
+                         vn = int(vertices[2]) 
+                    else:
+                         vn = None
+
+                    face.append((v,vt,vn))
+               faces.append(face)
+                    
      reDraw()
                 
 def calculateScreenCoord(x,y,z):
@@ -74,31 +115,55 @@ def moveCamera(event):
          reDraw()
 
 def reDraw():
-    canvas.delete("all")
-    for point in points:
-        x = point.getX() - camera.getX()
-        y = point.getY() - camera.getY()
-        z = point.getZ() - camera.getZ()
+     canvas.delete("all")
+     for point in points:
+          x = point.getX() - camera.getX()
+          y = point.getY() - camera.getY()
+          z = point.getZ() - camera.getZ()
 
-        screen_x, screen_y = calculateScreenCoord(x,y,z)
+          screen_x, screen_y = calculateScreenCoord(x,y,z)
 
-        screen_x*=scale
-        screen_y*=scale
-        point.setScreenCoords(screen_x, screen_y)
+          screen_x*=scale
+          screen_y*=scale
+          point.setScreenCoords(screen_x, screen_y)
 
-        centered_x = canvas_middle_width + screen_x
-        centered_y = canvas_middle_height - screen_y
+          centered_x = canvas_middle_width + screen_x
+          centered_y = canvas_middle_height - screen_y
 
-        radius = 5
-        canvas.create_oval(centered_x-radius, centered_y-radius, centered_x+radius, centered_y+radius, fill="blue")
-    
-    for line in edges:
-        centered_x1 = canvas_middle_width+points[line[0]].getScreenX()
-        centered_y1 = canvas_middle_height-points[line[0]].getScreenY()
-        centered_x2 = canvas_middle_width+points[line[1]].getScreenX()
-        centered_y2 = canvas_middle_height-points[line[1]].getScreenY()
-                
-        canvas.create_line(centered_x1, centered_y1, centered_x2, centered_y2, fill = "white")
-         
+          radius = 5
+          canvas.create_oval(centered_x-radius, centered_y-radius, centered_x+radius, centered_y+radius, fill="blue")
      
+     for line in edges:
+          centered_x1 = canvas_middle_width+points[line[0]].getScreenX()
+          centered_y1 = canvas_middle_height-points[line[0]].getScreenY()
+          centered_x2 = canvas_middle_width+points[line[1]].getScreenX()
+          centered_y2 = canvas_middle_height-points[line[1]].getScreenY()
+                    
+          canvas.create_line(centered_x1, centered_y1, centered_x2, centered_y2, fill = "white")
+     
+     for face in faces:
+          screenPoints = []
+          texturePoints = []
+
+          for triplet in face:
+               
+               if triplet[0] is not None:
+                    vertex = points[triplet[0]]
+                    screenPoints.append(canvas_middle_width+vertex.getScreenX())
+                    screenPoints.append(canvas_middle_height-vertex.getScreenY())
+               
+               # Currently doesn't do anything
+               if triplet[1] is not None:
+                    (u, v) = textureCoordinates[triplet[1]]
+                    texturePoints.append((u, v))
+               
+               # Currently doesn't do anything
+               if triplet[2] is not None:
+                    (x, y, z) = normals[triplet[2]]
+
+
+          if len(screenPoints) > 2:
+               canvas.create_polygon(screenPoints, outline="white", fill = "gray", stipple="gray25")
+
+
 root.bind("<Key>", moveCamera)
