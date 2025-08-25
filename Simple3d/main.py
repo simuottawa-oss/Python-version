@@ -10,13 +10,13 @@ def newWindow():
     # Root
     root = tk.Tk()
     root.title("3d areodynamics simulator")
-    root.geometry("800x600") 
+    root.geometry("1000x1000") 
     
     # Button to quit
     quit = tk.Button(root, text="Quit", command=root.destroy)
     quit.place(relx=0,rely=0)
 
-    # Button to add file
+    # Button to add filed
     fileSelect = tk.Button(root, text="Select File", command=open_file)
     fileSelect.place(relx=0.5,rely=0.5,anchor=tk.CENTER)
     
