@@ -94,44 +94,38 @@ def calculateScreenCoord(x,y,z):
 
 def moveCamera(event):
     global xDeg, yDeg
-
-
-
-
     
-
-
-    '''step = 0.1
+    step = 0.1
 
     if event.keysym == 'w':
          camera.setZ(camera.getZ() + step)
          reDraw()
     elif event.keysym == 's':
          camera.setZ(camera.getZ() - step)
-         reDraw()'''
+         reDraw()
     if event.keysym == 'a':
          if xDeg == 0:
-              xDeg = 359
+              xDeg = 355
          else:
-              xDeg -= 1
+              xDeg -= 5
          reDraw()
     elif event.keysym == 'd':
-         if xDeg == 359:
+         if xDeg == 355:
               xDeg = 0
          else:
-              xDeg += 1
+              xDeg += 5
          reDraw()
     elif event.keysym == 'q':
          if yDeg == 0:
-              yDeg = 359
+              yDeg = 355
          else:
-              yDeg -= 1
+              yDeg -= 5
          reDraw()
     elif event.keysym == 'e':
-         if yDeg == 359:
+         if yDeg == 355:
               yDeg = 0
          else:
-              yDeg += 1
+              yDeg += 5
          reDraw()
 
 def reDraw():
@@ -147,25 +141,6 @@ def reDraw():
           y = point.getY()
           z = point.getZ()
 
-          '''if xDeg != 0:
-               angle = math.radians(xDeg)
-               tempX = x
-               tempZ = z
-               x = tempX*math.cos(angle) - tempZ*math.sin(angle)
-               z = tempX*math.sin(angle) + tempZ*math.cos(angle)
-          if yDeg != 0:
-               angle = math.radians(yDeg)
-               tempY = y
-               tempZ = z
-               y = tempY*math.cos(angle) - tempZ*math.sin(angle)
-               z = tempY*math.sin(angle) + tempZ*math.cos(angle)
-          '''
-          
-          '''
-          x *= (math.cos(math.radians(xDeg)) - z*math.sin(math.radians(yDeg)))
-          z *= (math.cos(math.radians(xDeg)) + x*math.sin(math.radians(yDeg)))
-          y *= (math.cos(math.radians(yDeg)) - z*math.sin(math.radians(xDeg)))
-          '''
           if xDeg != 0:
                tempX = x
                x = x*math.cos(math.radians(xDeg)) + z*math.sin(math.radians(xDeg))
@@ -194,7 +169,7 @@ def reDraw():
           centered_x2 = canvas_middle_width+points[line[1]].getScreenX()
           centered_y2 = canvas_middle_height-points[line[1]].getScreenY()
                     
-          canvas.create_line(centered_x1, centered_y1, centered_x2, centered_y2, fill = "white")
+          canvas.create_line(centered_x1, centered_y1, centered_x2, centered_y2, fill = "black")
      
      for face in faces:
           screenPoints = []
