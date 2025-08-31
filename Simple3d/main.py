@@ -16,7 +16,7 @@ def newWindow():
     quit = tk.Button(root, text="Quit", command=root.destroy)
     quit.place(relx=0,rely=0)
 
-    # Button to add file
+    # Button to add filed
     fileSelect = tk.Button(root, text="Select File", command=open_file)
     fileSelect.place(relx=0.5,rely=0.5,anchor=tk.CENTER)
     
