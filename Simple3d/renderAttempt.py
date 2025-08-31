@@ -3,9 +3,8 @@ import math
 import tkinter as tk
 from tkinter import *
 
-<<<<<<< HEAD
 # Creates a camera at position (0.5,0.75,-1)
-camera = instance.instance(0.5,0.75,-1)
+camera = instance.instance(-500,-500,-500/(2*(3**0.5)/3))
 
 # Lists storing parsed OBJ model data
 points = [] # List of instance objects representing 3D vertices
@@ -14,17 +13,6 @@ objects = [] # List of named objects in the OBJ file
 faces = [] # List of faces, which are each a list of (vertex, texture, normal) index triplets
 textureCoordinates = [] # List of (u, v) texture coordinates
 normals = [] # List of (x, y, z) unit vectors representing normals for lighting
-=======
-
-camera = instance.instance(0,0,-3)
-
-points = []
-edges = []
-objects = []
-faces = []
-textureCoordinates = []
-normals = []
->>>>>>> 5e69b328d60f3586506b57889706a1ce54e46c30
 
 scale = 1000
 
@@ -37,10 +25,13 @@ canvas.pack()
 canvas_middle_width = int(canvas['width'])/2
 canvas_middle_height = int(canvas['height'])/2
 
-global xDeg
-global yDeg
-xDeg = 0
-yDeg = 0
+
+
+
+
+
+
+
 
 
 def initRender(filename):
@@ -62,19 +53,13 @@ def initRender(filename):
                points.append(point)
 
           elif coordinates and coordinates[0] == "l":
-<<<<<<< HEAD
                # Store edge represented by two vertex indices (v1, v2) in edges
                pointOne = int(coordinates[1]) # Index of vertex 1
                pointTwo = int(coordinates[2]) # Index of vertex 2
-=======
-               pointOne = int(coordinates[1])
-               pointTwo = int(coordinates[2])
->>>>>>> 5e69b328d60f3586506b57889706a1ce54e46c30
                edge = (pointOne,pointTwo)
                edges.append(edge)
 
           elif coordinates and coordinates[0] == "o":
-<<<<<<< HEAD
                # Store object name in objects
                objects.append(' '.join(coordinates[1:]))
 
@@ -86,21 +71,12 @@ def initRender(filename):
 
           elif coordinates and coordinates[0] == "vn":
                # Store normal vector (x, y, z) in normals
-=======
-               objects.append(' '.join(coordinates[1:]))
-
-          elif coordinates and coordinates[0] == "vt":
-               textureCoordinates.append((float(coordinates[1]), float(coordinates[2])))
-
-          elif coordinates and coordinates[0] == "vn":
->>>>>>> 5e69b328d60f3586506b57889706a1ce54e46c30
                x = float(coordinates[1])
                y = float(coordinates[2])
                z = float(coordinates[3])
                normals.append((x,y,z))
 
           elif coordinates and coordinates[0] == "f":
-<<<<<<< HEAD
                # Store face as a list of vertex triplets (v, vt, vn) in faces
                # v = vertex index, vt = texture coordinate index, vn = normal index
                face = []
@@ -108,29 +84,18 @@ def initRender(filename):
                     vertexIndices = vertexTriplet.split("/")
 
                     # Vertex index
-=======
-               face = []
-               for vertexTriplet in coordinates[1:]:
-                    vertexIndices = vertexTriplet.split("/")
->>>>>>> 5e69b328d60f3586506b57889706a1ce54e46c30
                     if vertexIndices[0] != "":
                          v = int(vertexIndices[0])
                     else:
                          v = None
 
-<<<<<<< HEAD
                     # Texture coordinate index
-=======
->>>>>>> 5e69b328d60f3586506b57889706a1ce54e46c30
                     if len(vertexIndices) > 1 and vertexIndices[1] != "":
                          vt = int(vertexIndices[1]) 
                     else:
                          vt = None
 
-<<<<<<< HEAD
                     # Normal vector index
-=======
->>>>>>> 5e69b328d60f3586506b57889706a1ce54e46c30
                     if len(vertexIndices) > 2 and vertexIndices[2] != "":
                          vn = int(vertexIndices[2]) 
                     else:
@@ -145,11 +110,22 @@ def calculateScreenCoord(x,y,z):
      '''
      Projects 3D camera-space coordinates into 2D screen space.
      '''
+     fov = 60
+     screenDist = (canvas_middle_height/(2*math.tan(math.radians(fov/2))))
+     screen_x = (x* screenDist) / z
+     screen_y = (y * screenDist) / z
 
-<<<<<<< HEAD
-     nearplane = camera.getZ()  + 0.1
+     return screen_x, screen_y
+    
+    
+    
+    
+    
+    
+    
+    
+     '''nearplane = camera.getZ()  + 0.1
 
-     w = 1
      aspect = 5
      
      fov = 60
@@ -158,7 +134,7 @@ def calculateScreenCoord(x,y,z):
           return "NaN","NaN"
      x *= (nearplane/ aspect*math.tan(math.radians(fov/2))) / (1 + nearplane/z) 
      y *= (nearplane/math.tan(fov/2))/(1 + nearplane/z)
-     return x,y
+     return x,y'''
 
 def moveCamera(event):
     '''
@@ -167,53 +143,27 @@ def moveCamera(event):
     A/D changes the X coordinates.
     Q/E changes the Y coordinates.
     '''
-=======
-    h = canvas_middle_height/scale
-    fov = 60
-    screenDist = (h/(2*math.tan(math.radians(fov/2))))
-    screen_x = (x * screenDist) / z
-    screen_y = (y * screenDist) / z
-    return screen_x,screen_y
-
-def moveCamera(event):
-    global xDeg, yDeg
-    
->>>>>>> 5e69b328d60f3586506b57889706a1ce54e46c30
     step = 0.1
-
     if event.keysym == 'w':
          camera.setZ(camera.getZ() + step)
          reDraw()
     elif event.keysym == 's':
          camera.setZ(camera.getZ() - step)
          reDraw()
-    if event.keysym == 'a':
-         if xDeg == 0:
-              xDeg = 355
-         else:
-              xDeg -= 5
+    elif event.keysym == 'a':
+         camera.setX(camera.getX() - step)
          reDraw()
     elif event.keysym == 'd':
-         if xDeg == 355:
-              xDeg = 0
-         else:
-              xDeg += 5
+         camera.setX(camera.getX() + step)
          reDraw()
     elif event.keysym == 'q':
-         if yDeg == 0:
-              yDeg = 355
-         else:
-              yDeg -= 5
+         camera.setY(camera.getY() - step)
          reDraw()
     elif event.keysym == 'e':
-         if yDeg == 355:
-              yDeg = 0
-         else:
-              yDeg += 5
+         camera.setY(camera.getY() + step)
          reDraw()
 
 def reDraw():
-<<<<<<< HEAD
      '''
      Clears the canvas and redraws all vertices, edges, and faces based on the current camera position.
      '''
@@ -230,8 +180,6 @@ def reDraw():
           screen_x, screen_y = calculateScreenCoord(x,y,z)
 
           # Scale the screen coordinates for display
-          screen_x*=scale
-          screen_y*=scale
           point.setScreenCoords(screen_x, screen_y)
 
           # Translate the screen coordinates so the model can be centered on the canvas
@@ -262,62 +210,11 @@ def reDraw():
                # v = vertex index, vt = texture coordinate index, vn = normal index
 
                # Convert vertex index into 2D screen coordinates
-=======
-     canvas.delete("all")
-     for point in points:
-
-          '''
-          x = point.getX() - camera.getX()
-          y = point.getY() - camera.getY()
-          z = point.getZ() - camera.getZ()
-          '''
-          x = point.getX()
-          y = point.getY()
-          z = point.getZ()
-
-          if xDeg != 0:
-               tempX = x
-               x = x*math.cos(math.radians(xDeg)) + z*math.sin(math.radians(xDeg))
-               z = z*math.cos(math.radians(xDeg)) - tempX*math.sin(math.radians(xDeg))
-          if yDeg != 0:
-               tempY = y
-               y = y*math.cos(math.radians(yDeg)) + z*math.sin(math.radians(yDeg))
-               z = z*math.cos(math.radians(yDeg)) - tempY*math.sin(math.radians(yDeg))
-
-          z -= camera.getZ()
-          screen_x, screen_y = calculateScreenCoord(x,y,z)
-
-          screen_x*=scale
-          screen_y*=scale
-          point.setScreenCoords(screen_x, screen_y)
-
-          centered_x = canvas_middle_width + screen_x
-          centered_y = canvas_middle_height - screen_y
-
-          radius = 5
-          canvas.create_oval(centered_x-radius, centered_y-radius, centered_x+radius, centered_y+radius, fill="blue")
-     
-     for line in edges:
-          centered_x1 = canvas_middle_width+points[line[0]].getScreenX()
-          centered_y1 = canvas_middle_height-points[line[0]].getScreenY()
-          centered_x2 = canvas_middle_width+points[line[1]].getScreenX()
-          centered_y2 = canvas_middle_height-points[line[1]].getScreenY()
-                    
-          canvas.create_line(centered_x1, centered_y1, centered_x2, centered_y2, fill = "black")
-     
-     for face in faces:
-          screenPoints = []
-          texturePoints = []
-
-          for vertexTriplet in face:
-               
->>>>>>> 5e69b328d60f3586506b57889706a1ce54e46c30
                if vertexTriplet[0] is not None:
                     vertex = points[vertexTriplet[0]]
                     screenPoints.append(canvas_middle_width+vertex.getScreenX())
                     screenPoints.append(canvas_middle_height-vertex.getScreenY())
                
-<<<<<<< HEAD
                # Get texture coordinates (u, v) from the index (Currently doesn't do anything)
                if vertexTriplet[1] is not None:
                     (u, v) = textureCoordinates[vertexTriplet[1]]
@@ -329,20 +226,6 @@ def reDraw():
           # Draw the face
           if len(screenPoints) > 2:
                canvas.create_polygon(screenPoints, outline="black", fill = "gray")
-=======
-               # Currently doesn't do anything
-               if vertexTriplet[1] is not None:
-                    (u, v) = textureCoordinates[vertexTriplet[1]]
-                    texturePoints.append((u, v))
-               
-               # Currently doesn't do anything
-               if vertexTriplet[2] is not None:
-                    (x, y, z) = normals[vertexTriplet[2]]
-
-
-          if len(screenPoints) > 2:
-               canvas.create_polygon(screenPoints, outline="white", fill = "gray")
->>>>>>> 5e69b328d60f3586506b57889706a1ce54e46c30
 
 
 root.bind("<Key>", moveCamera)
