@@ -129,6 +129,8 @@ def moveCamera(event):
          reDraw()
 
 def reDraw():
+     # Method draw interface
+     #    Add buttons that do stuff...
      canvas.delete("all")
      for point in points:
 
