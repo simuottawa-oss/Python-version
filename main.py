@@ -99,7 +99,7 @@ def onUserCreate():
     return True
 
 def onUserUpdate(elapsedTime):
-    mesh.updateTheta(elapsedTime)
+    
     speed = 5.0 * elapsedTime
 
     if keys.get("w"):
