@@ -1,0 +1,4 @@
+Cython
+customtkinter
+numpy
+setuptools
