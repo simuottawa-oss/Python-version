@@ -5,11 +5,13 @@
 from setuptools import setup, Extension
 from Cython.Build import cythonize
 ext = Extension (
-    "cppCalculations", # Name
+    "simple3d.cppCalculations", # Name
     sources=["cppCalculations.pyx"], # Our Cython source file
     language="c++" # Set to C++
 )
 
 setup(
+    packages=["simple3d"],
+    package_dir={"": "src"},
     ext_modules = cythonize(ext)
 )

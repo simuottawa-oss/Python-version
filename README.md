@@ -30,7 +30,7 @@ py setup.py build_ext --inplace
 python3 setup.py build_ext --inplace
 ```
 
-The source file `cppCalculations.pyx` is cross-platform, but the compiled extension is platform-specific. Windows builds a `.pyd` file, while macOS builds a `.so` file. Run the build command on each computer before running the program, and run it again any time you edit `cppCalculations.pyx`.
+The source file `src/simple3d/cppCalculations.pyx` is cross-platform, but the compiled extension is platform-specific. Windows builds a `.pyd` file, while macOS builds a `.so` file. Run the build command on each computer before running the program, and run it again any time you edit `cppCalculations.pyx`.
 
 Windows also needs a C++ compiler installed. If the build fails with a compiler error, install Microsoft C++ Build Tools, then try the build command again.
 
