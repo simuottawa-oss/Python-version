@@ -1,11 +1,21 @@
-import src.simple3d.cppCalculations as cppCalculations
-import customtkinter as ctk
+import sys
 import time
+from pathlib import Path
+
+import customtkinter as ctk
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
+from simple3d import cppCalculations
+
 screenWidth = 800
 screenHeight = 600
 mesh = cppCalculations.createMesh(screenWidth, screenHeight)
 lastTime = time.time()
 keys = {}
+MODELS_DIR = PROJECT_ROOT / "assets" / "models"
 # FOR TESTING
 wireframeColor = "Black"
 
@@ -90,7 +100,7 @@ def onUserCreate():
     #mesh.loadCubeMesh()
     
     # LOAD OBJECT FILE
-    objectData = loadObjectFile("teapot.obj")
+    objectData = loadObjectFile(MODELS_DIR / "teapot.obj")
     mesh.loadMesh(objectData)
     
     #   Projection Matrix
@@ -117,7 +127,6 @@ def onUserUpdate(elapsedTime):
     return True
 
 
-print("closing application status..." + str(openApplication()))
-
-
+if __name__ == "__main__":
+    print("closing application status..." + str(openApplication()))
 

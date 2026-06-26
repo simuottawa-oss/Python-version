@@ -6,7 +6,7 @@ from setuptools import setup, Extension
 from Cython.Build import cythonize
 ext = Extension (
     "simple3d.cppCalculations", # Name
-    sources=["cppCalculations.pyx"], # Our Cython source file
+    sources=["src/simple3d/cppCalculations.pyx"], # Our Cython source file
     language="c++" # Set to C++
 )
 
