@@ -1,4 +1,4 @@
-import cppCalculations 
+import src.simple3d.cppCalculations as cppCalculations
 import customtkinter as ctk
 import time
 screenWidth = 800
