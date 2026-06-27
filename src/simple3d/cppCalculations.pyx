@@ -358,12 +358,12 @@ cdef class pyMesh:
 
                 
                 trianglesToRaster.append([
-                    (triProjected.p[0].x + 1.0) * 0.5 * self.screenWidth,
-                    (triProjected.p[0].y + 1.0) * 0.5 * self.screenHeight,
-                    (triProjected.p[1].x + 1.0) * 0.5 * self.screenWidth,
-                    (triProjected.p[1].y + 1.0) * 0.5 * self.screenHeight,
-                    (triProjected.p[2].x + 1.0) * 0.5 * self.screenWidth,
-                    (triProjected.p[2].y + 1.0) * 0.5 * self.screenHeight,
+                    (triProjected.p[0].x + 1.0) * 0.5 * self.screenWidth + 2 * self.screenWidth,
+                    (triProjected.p[0].y + 1.0) * 0.5 * self.screenHeight + self.screenHeight,
+                    (triProjected.p[1].x + 1.0) * 0.5 * self.screenWidth+ 2 * self.screenWidth,
+                    (triProjected.p[1].y + 1.0) * 0.5 * self.screenHeight+ self.screenHeight,
+                    (triProjected.p[2].x + 1.0) * 0.5 * self.screenWidth+ 2 * self.screenWidth,
+                    (triProjected.p[2].y + 1.0) * 0.5 * self.screenHeight+ self.screenHeight,
                     color,
                     triProjected.p[0].z,
                     triProjected.p[1].z,
@@ -406,7 +406,7 @@ cdef class pyMesh:
             [1.0,0.0,1.0,0.0,0.0,1.0,0.0,0.0,0.0],
             [1.0,0.0,1.0,0.0,0.0,0.0,1.0,0.0,0.0],
         ])
-def createMesh(screenWidth, screenHeight):
+def createMesh(screenHeight,screenWidth):
     return pyMesh(screenWidth, screenHeight)
 
 def createTriangle():
