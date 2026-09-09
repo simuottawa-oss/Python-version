@@ -1,9 +1,11 @@
+# cython: boundscheck=False, wraparound=False, cdivision=True, initializedcheck=False
 # To build the Cython file, use the following command:
 # python setup.py build_ext --inplace
 
 from libcpp.vector cimport vector
-from libc.math cimport tan, cos, sin
+from libc.math cimport tan, cos, sin, sqrt
 import numpy as np
+cimport numpy as cnp
 
 cdef struct vec3d:
     float x, y, z, w
@@ -17,8 +19,35 @@ cdef cppclass mesh:
 cdef cppclass mat4x4:
     float m[4][4];
 
+
+cdef inline float edge(
+    float ax, float ay,
+    float bx, float by,
+    float px, float py
+):
+    return (px - ax) * (by - ay) - (py - ay) * (bx - ax)
+
+
+cdef inline float min3f(float a, float b, float c):
+    cdef float m = a
+    if b < m:
+        m = b
+    if c < m:
+        m = c
+    return m
+
+
+cdef inline float max3f(float a, float b, float c):
+    cdef float m = a
+    if b > m:
+        m = b
+    if c > m:
+        m = c
+    return m
+
+
 cdef class pyMesh:
-    cdef float screenWidth,screenHeight, fTheta, fYaw
+    cdef float screenWidth, screenHeight, fTheta, fYaw, fPitch
     cdef mesh* m
     cdef mat4x4 matProj,matRotX, matRotZ
     cdef vec3d vCamera, vLookDir
@@ -27,12 +56,51 @@ cdef class pyMesh:
         self.screenHeight = screenHeight
         self.screenWidth = screenWidth
         self.fTheta = 0.0
+        self.fYaw = 0.0
+        self.fPitch = 0.0
     def moveCamera(self, x, y, z):
         self.vCamera.x += x
         self.vCamera.y += y
         self.vCamera.z += z
+
+
+    def moveCameraRelative(
+    self,
+    float forwardAmount,
+    float rightAmount
+):
+        cdef float rightX
+        cdef float rightZ
+
+        # Right stays parallel to the XZ plane
+        rightX = cos(self.fYaw)
+        rightZ = sin(self.fYaw)
+
+        # Forward follows BOTH yaw and pitch
+        self.vCamera.x += (
+            self.vLookDir.x * forwardAmount
+            + rightX * rightAmount
+        )
+
+        self.vCamera.y += (
+            self.vLookDir.y * forwardAmount
+        )
+
+        self.vCamera.z += (
+            self.vLookDir.z * forwardAmount
+            + rightZ * rightAmount
+        )
+
     cpdef rotateCamera(self, float yaw, float pitch):
         self.fYaw += yaw
+        self.fPitch += pitch
+
+        cdef float maxPitch = 1.50
+
+        if self.fPitch > maxPitch:
+            self.fPitch = maxPitch
+        elif self.fPitch < -maxPitch:
+            self.fPitch = -maxPitch
     def __dealloc__(self):
         if self.m != NULL:
             del self.m
@@ -151,7 +219,7 @@ cdef class pyMesh:
     cdef vec3d vectorNormalize(self, vec3d v):
         cdef vec3d normal
         cdef float l
-        l = (v.x * v.x + v.y * v.y + v.z * v.z) ** 0.5
+        l = sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
         if l == 0.0:
             normal.x = 0.0
             normal.y = 0.0
@@ -204,34 +272,58 @@ cdef class pyMesh:
         matrix.m[3][1] = y
         matrix.m[3][2] = z
         return matrix
-    cdef mat4x4 matrixPointAt(self, vec3d &pos, vec3d &target, vec3d &up):
-        
-        # New forward vector
-        cdef vec3d newForward, a, newUp, newRight
-        newForward = self.subVector(target,pos)
+    cdef mat4x4 matrixPointAt(
+        self,
+        vec3d &pos,
+        vec3d &target,
+        vec3d &up
+    ):
+        cdef vec3d newForward
+        cdef vec3d a
+        cdef vec3d newUp
+        cdef vec3d newRight
+
+        # Forward direction
+        newForward = self.subVector(target, pos)
         newForward = self.vectorNormalize(newForward)
 
-        # New up vector
-        a = self.mulVector(newForward, self.dotProduct(up,newForward))
+        # Corrected up direction
+        a = self.mulVector(
+            newForward,
+            self.dotProduct(up, newForward)
+        )
+
         newUp = self.subVector(up, a)
         newUp = self.vectorNormalize(newUp)
 
-        # New right vector
-        newRight = self.crossProduct(newUp,newForward)
+        # Right direction
+        newRight = self.crossProduct(
+            newUp,
+            newForward
+        )
 
-        cdef mat4x4 matrix
+        # IMPORTANT:
+        # Initialize every matrix element to zero first.
+        cdef mat4x4 matrix = self.zeroMatrix()
+
         matrix.m[0][0] = newRight.x
         matrix.m[0][1] = newRight.y
         matrix.m[0][2] = newRight.z
+
         matrix.m[1][0] = newUp.x
         matrix.m[1][1] = newUp.y
         matrix.m[1][2] = newUp.z
+
         matrix.m[2][0] = newForward.x
         matrix.m[2][1] = newForward.y
         matrix.m[2][2] = newForward.z
+
         matrix.m[3][0] = pos.x
         matrix.m[3][1] = pos.y
         matrix.m[3][2] = pos.z
+
+        matrix.m[3][3] = 1.0
+
         return matrix
 
     cdef mat4x4 matrixQuickInverse(self, mat4x4 &m): # Only for this matrix
@@ -270,6 +362,7 @@ cdef class pyMesh:
         v.z = 0
         v.w = 1.0
         return v
+
     def projectMesh(self):
         cdef triangle triProjected, triTransformed, triViewed
         cdef list trianglesToRaster = []
@@ -358,18 +451,20 @@ cdef class pyMesh:
 
                 
                 trianglesToRaster.append([
-                    (triProjected.p[0].x + 1.0) * 0.5 * self.screenWidth + 2 * self.screenWidth,
-                    (triProjected.p[0].y + 1.0) * 0.5 * self.screenHeight + self.screenHeight,
-                    (triProjected.p[1].x + 1.0) * 0.5 * self.screenWidth+ 2 * self.screenWidth,
-                    (triProjected.p[1].y + 1.0) * 0.5 * self.screenHeight+ self.screenHeight,
-                    (triProjected.p[2].x + 1.0) * 0.5 * self.screenWidth+ 2 * self.screenWidth,
-                    (triProjected.p[2].y + 1.0) * 0.5 * self.screenHeight+ self.screenHeight,
+                    (triProjected.p[0].x + 1.0) * 0.5 * self.screenWidth,
+                    (triProjected.p[0].y + 1.0) * 0.5 * self.screenHeight,
+
+                    (triProjected.p[1].x + 1.0) * 0.5 * self.screenWidth,
+                    (triProjected.p[1].y + 1.0) * 0.5 * self.screenHeight,
+
+                    (triProjected.p[2].x + 1.0) * 0.5 * self.screenWidth,
+                    (triProjected.p[2].y + 1.0) * 0.5 * self.screenHeight,
+
                     color,
                     triProjected.p[0].z,
                     triProjected.p[1].z,
-                    triProjected.p[2].z,
+                    triProjected.p[2].z
                 ])
-
         trianglesToRaster.sort(key=lambda t: (t[7] + t[8] + t[9])/3, reverse=True)
         return trianglesToRaster
     def getScreenWidth(self):
@@ -379,6 +474,283 @@ cdef class pyMesh:
     def loadMesh(self, data):
         self.setTris(data)
         return True
+#####TEST##########
+    cdef void drawTriangle(
+        self,
+        cnp.ndarray[cnp.uint8_t, ndim=3] framebuffer,
+        cnp.ndarray[cnp.float32_t, ndim=2] depthbuffer,
+        float x1, float y1, float z1,
+        float x2, float y2, float z2,
+        float x3, float y3, float z3,
+        unsigned char shade
+    ):
+        cdef int width = framebuffer.shape[1]
+        cdef int height = framebuffer.shape[0]
+
+        cdef int minX = <int>min3f(x1, x2, x3)
+        cdef int maxX = <int>max3f(x1, x2, x3)
+        cdef int minY = <int>min3f(y1, y2, y3)
+        cdef int maxY = <int>max3f(y1, y2, y3)
+
+        cdef int x, y
+        cdef float px, py
+
+        # Edge-function values. These also become barycentric numerators.
+        cdef float w0, w1, w2
+        cdef float area
+        cdef float invArea
+
+        cdef float lambda0, lambda1, lambda2
+        cdef float z
+
+        # Clip the triangle bounding box to the framebuffer.
+        if minX < 0:
+            minX = 0
+        if minY < 0:
+            minY = 0
+        if maxX >= width:
+            maxX = width - 1
+        if maxY >= height:
+            maxY = height - 1
+
+        # Triangle is completely outside the framebuffer.
+        if minX > maxX or minY > maxY:
+            return
+
+        # Signed triangle area.
+        area = edge(x2, y2, x3, y3, x1, y1)
+
+        # Degenerate triangle.
+        if area == 0.0:
+            return
+
+        invArea = 1.0 / area
+
+        for y in range(minY, maxY + 1):
+            py = y + 0.5
+
+            for x in range(minX, maxX + 1):
+                px = x + 0.5
+
+                # Each edge is opposite the corresponding vertex.
+                w0 = edge(x2, y2, x3, y3, px, py)
+                w1 = edge(x3, y3, x1, y1, px, py)
+                w2 = edge(x1, y1, x2, y2, px, py)
+
+                # Inside-triangle test that works for both winding orders.
+                if area > 0.0:
+                    if w0 < 0.0 or w1 < 0.0 or w2 < 0.0:
+                        continue
+                else:
+                    if w0 > 0.0 or w1 > 0.0 or w2 > 0.0:
+                        continue
+
+                # Barycentric coordinates.
+                lambda0 = w0 * invArea
+                lambda1 = w1 * invArea
+                lambda2 = w2 * invArea
+
+                # Interpolate NDC depth across the triangle.
+                z = (
+                    lambda0 * z1 +
+                    lambda1 * z2 +
+                    lambda2 * z3
+                )
+
+                # Z-buffer test: smaller depth is closer.
+                if z < depthbuffer[y, x]:
+                    depthbuffer[y, x] = z
+
+                    framebuffer[y, x, 0] = shade
+                    framebuffer[y, x, 1] = shade
+                    framebuffer[y, x, 2] = shade
+
+###############
+
+    def renderToFramebuffer(
+        self,
+        cnp.ndarray[cnp.uint8_t, ndim=3] framebuffer,
+        cnp.ndarray[cnp.float32_t, ndim=2] depthbuffer
+    ):
+        """
+        Optimized render path.
+
+        Projection and rasterization stay inside Cython, so Python no longer
+        receives a list of projected triangles and no longer calls
+        drawTriangle() once per triangle.
+        """
+        cdef triangle tri
+        cdef triangle triProjected
+        cdef triangle triTransformed
+        cdef triangle triViewed
+
+        cdef vec3d line1, line2, normal
+        cdef vec3d vCameraRay, vUp, vTarget
+        cdef vec3d lightDir
+
+        cdef mat4x4 matCamera
+        cdef mat4x4 matView
+        cdef mat4x4 matCameraRot
+        cdef mat4x4 matRotZLocal
+        cdef mat4x4 matRotXLocal
+        cdef mat4x4 matTrans
+        cdef mat4x4 matWorld
+
+        cdef float dp
+        cdef float color
+
+        cdef float x1, y1
+        cdef float x2, y2
+        cdef float x3, y3
+
+        cdef unsigned char shade
+        cdef Py_ssize_t i
+        cdef Py_ssize_t triCount = self.m.tris.size()
+
+        # The color and depth buffers must describe the same screen.
+        if (
+            framebuffer.shape[0] != depthbuffer.shape[0] or
+            framebuffer.shape[1] != depthbuffer.shape[1]
+        ):
+            raise ValueError("framebuffer and depthbuffer dimensions must match")
+
+        # Build the world matrix once per frame.
+        matRotZLocal = self.matrixMakeRotationZ(self.fTheta * 0.5)
+        matRotXLocal = self.matrixMakeRotationX(self.fTheta)
+
+        matTrans = self.matrixMakeTranslation(0.0, 0.0, 16.0)
+
+        matWorld = self.matrixMultiplyMatrix(matRotZLocal, matRotXLocal)
+        matWorld = self.matrixMultiplyMatrix(matWorld, matTrans)
+
+        # Build full 3D camera direction from yaw + pitch
+        self.vLookDir.x = -sin(self.fYaw) * cos(self.fPitch)
+        self.vLookDir.y =  sin(self.fPitch)
+        self.vLookDir.z =  cos(self.fYaw) * cos(self.fPitch)
+        self.vLookDir.w = 1.0
+
+        # Point the camera toward:
+        # camera position + look direction
+        vTarget = self.addVector(
+            self.vCamera,
+            self.vLookDir
+        )
+
+        # World up direction
+        vUp.x = 0.0
+        vUp.y = 1.0
+        vUp.z = 0.0
+        vUp.w = 1.0
+
+        # Build camera/view matrices
+        matCamera = self.matrixPointAt(
+            self.vCamera,
+            vTarget,
+            vUp
+        )
+
+        matView = self.matrixQuickInverse(matCamera)
+
+        # The light is attached to the camera position.
+        # A direction toward the camera is calculated per visible triangle.
+        for i in range(triCount):
+            tri = self.m.tris[i]
+
+            # World transform.
+            triTransformed.p[0] = self.multiplyMatrixVector(matWorld, tri.p[0])
+            triTransformed.p[1] = self.multiplyMatrixVector(matWorld, tri.p[1])
+            triTransformed.p[2] = self.multiplyMatrixVector(matWorld, tri.p[2])
+
+            # Surface normal.
+            line1 = self.subVector(triTransformed.p[1], triTransformed.p[0])
+            line2 = self.subVector(triTransformed.p[2], triTransformed.p[0])
+
+            normal = self.crossProduct(line1, line2)
+            normal = self.vectorNormalize(normal)
+
+            # Back-face culling.
+            vCameraRay = self.subVector(triTransformed.p[0], self.vCamera)
+            if self.dotProduct(normal, vCameraRay) >= 0.0:
+                continue
+
+            # Camera-following point light.
+            # Direction from this triangle toward the camera/light position.
+            lightDir = self.subVector(
+                self.vCamera,
+                triTransformed.p[0]
+            )
+            lightDir = self.vectorNormalize(lightDir)
+
+            dp = self.dotProduct(normal, lightDir)
+
+            # Surfaces facing away from the light receive no diffuse light.
+            if dp < 0.0:
+                dp = 0.0
+            elif dp > 1.0:
+                dp = 1.0
+
+            color = dp * 255.0
+            shade = <unsigned char>color
+
+            # World -> view.
+            triViewed.p[0] = self.multiplyMatrixVector(matView, triTransformed.p[0])
+            triViewed.p[1] = self.multiplyMatrixVector(matView, triTransformed.p[1])
+            triViewed.p[2] = self.multiplyMatrixVector(matView, triTransformed.p[2])
+
+            # Reject triangles that are behind the camera or cross the near plane.
+            # This prevents negative-W / behind-camera projection from appearing
+            # mirrored or inverted when the camera turns away from the model.
+            if (
+                triViewed.p[0].z <= 0.1 or
+                triViewed.p[1].z <= 0.1 or
+                triViewed.p[2].z <= 0.1
+            ):
+                continue
+
+            # View -> projected clip space.
+            triProjected.p[0] = self.multiplyMatrixVector(self.matProj, triViewed.p[0])
+            triProjected.p[1] = self.multiplyMatrixVector(self.matProj, triViewed.p[1])
+            triProjected.p[2] = self.multiplyMatrixVector(self.matProj, triViewed.p[2])
+
+            # Avoid division by zero for geometry on the camera plane.
+            if (
+                triProjected.p[0].w == 0.0 or
+                triProjected.p[1].w == 0.0 or
+                triProjected.p[2].w == 0.0
+            ):
+                continue
+
+            # Perspective divide.
+            triProjected.p[0] = self.divVector(triProjected.p[0], triProjected.p[0].w)
+            triProjected.p[1] = self.divVector(triProjected.p[1], triProjected.p[1].w)
+            triProjected.p[2] = self.divVector(triProjected.p[2], triProjected.p[2].w)
+
+            # Normalized device coordinates [-1,+1] -> framebuffer pixels.
+            x1 = (triProjected.p[0].x + 1.0) * 0.5 * self.screenWidth
+            y1 = (1.0 - triProjected.p[0].y) * 0.5 * self.screenHeight
+
+            x2 = (triProjected.p[1].x + 1.0) * 0.5 * self.screenWidth
+            y2 = (1.0 - triProjected.p[1].y) * 0.5 * self.screenHeight
+
+            x3 = (triProjected.p[2].x + 1.0) * 0.5 * self.screenWidth
+            y3 = (1.0 - triProjected.p[2].y) * 0.5 * self.screenHeight
+
+            # Rasterize immediately. No Python list, Python sort, or
+            # Python -> Cython call per triangle.
+            self.drawTriangle(
+                framebuffer,
+                depthbuffer,
+                x1, y1, triProjected.p[0].z,
+                x2, y2, triProjected.p[1].z,
+                x3, y3, triProjected.p[2].z,
+                shade
+            )
+
+        return triCount
+
+
+
+
 
     def loadCubeMesh(self):
         self.setTris([
@@ -406,8 +778,9 @@ cdef class pyMesh:
             [1.0,0.0,1.0,0.0,0.0,1.0,0.0,0.0,0.0],
             [1.0,0.0,1.0,0.0,0.0,0.0,1.0,0.0,0.0],
         ])
-def createMesh(screenHeight,screenWidth):
+def createMesh(screenWidth,screenHeight):
     return pyMesh(screenWidth, screenHeight)
 
 def createTriangle():
     return triangle()
+
