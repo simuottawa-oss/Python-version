@@ -35,8 +35,9 @@ depthbuffer = np.full(
 
 
 def render(app):
-    
+
     startTime = time.time()
+
     framebuffer.fill(0)
     depthbuffer.fill(np.inf)
 
@@ -44,41 +45,54 @@ def render(app):
         framebuffer,
         depthbuffer
     )
+
     renderTime = time.time()
-   
 
-    image = Image.fromarray(framebuffer, "RGB")
+    image = Image.fromarray(
+        framebuffer,
+        "RGB"
+    )
 
+    canvasWidth = max(
+        1,
+        app.canvas.winfo_width()
+    )
 
+    canvasHeight = max(
+        1,
+        app.canvas.winfo_height()
+    )
 
-    
-    # image = image.resize(
-    #     (canvas_width, canvas_height),
-    #     Image.Resampling.NEAREST
-    # )
-    # if (
-    #     app.display_width != screenWidth
-    #     or app.display_height != screenHeight
-    # ):
-    #     image = image.resize(
-    #         (app.display_width, app.display_height),
-    #         Image.Resampling.NEAREST
-    #     )
-    # image = Image.fromarray(framebuffer, "RGB")
+    image = image.resize(
+        (
+            canvasWidth,
+            canvasHeight
+        ),
+        Image.Resampling.NEAREST
+    )
 
-    app.tk_image.paste(image)
-    # app.tk_image = ImageTk.PhotoImage(image)
+    app.tk_image = ImageTk.PhotoImage(
+        image
+    )
 
-    # app.canvas.itemconfig(
-    #     app.canvas_image,
-    #     image=app.tk_image
-    # )
-    display_time = time.time() 
-    
-    print(f"Render time: {(renderTime - startTime) * 1000:f} ms")
-    print(f"Display time: {(display_time - renderTime) * 1000:0f} ms")
+    app.canvas.itemconfig(
+        app.canvas_image,
+        image=app.tk_image
+    )
+
+    displayTime = time.time()
+
+    print(
+        f"Render time: "
+        f"{(renderTime - startTime) * 1000:.2f} ms"
+    )
+
+    print(
+        f"Display time: "
+        f"{(displayTime - renderTime) * 1000:.2f} ms"
+    )
+
     return True
-
 
 def openApplication():
     global lastTime
@@ -176,14 +190,14 @@ def openApplication():
         anchor="nw",
         image=simuO.tk_image
     )
-    # simuO.display_width = screenWidth
-    # simuO.display_height = screenHeight 
+    simuO.display_width = screenWidth
+    simuO.display_height = screenHeight 
     
-    # def on_canvas_resize(event):
-    #     simuO.display_width = event.width
-    #     simuO.display_height = event.height
+    def on_canvas_resize(event):
+        simuO.display_width = event.width
+        simuO.display_height = event.height
 
-    #simuO.canvas.bind("<Configure>", on_canvas_resize)
+    simuO.canvas.bind("<Configure>", on_canvas_resize)
     print("Canvas image created")
 
     # ---------------------------------------------------------
@@ -351,7 +365,7 @@ def loadObjectFile(filename):
 
 def onUserCreate():
     # LOAD OBJECT FILE
-    objectData = loadObjectFile("crab.obj")
+    objectData = loadObjectFile("axis.obj")
     mesh.loadMesh(objectData)
 
     # Projection matrix
