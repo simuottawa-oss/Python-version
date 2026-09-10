@@ -192,7 +192,7 @@ class SimuOMainWindow(QMainWindow):
             self,
             "Import File",
             "",
-            "3D Model Files (*.obj);;All Files (*)",
+            "3D Model Files (*.simuOPart);;All Files (*)",
         )
 
         if not filePath:

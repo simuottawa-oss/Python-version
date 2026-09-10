@@ -1,4 +1,9 @@
-Cython
-customtkinter
+PySide6
+PyOpenGL
+PyGLM
 numpy
-setuptools
+customtkinter
+Pillow
+moderngl
+glfw
+Cython
