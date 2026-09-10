@@ -400,6 +400,8 @@ class OpenGLViewport(QOpenGLWidget):
         scene=None,
         
     ):
+
+            
         
         self.axisShader = None
         self.axisVAO = None
@@ -456,7 +458,35 @@ class OpenGLViewport(QOpenGLWidget):
     # OPENGL SETUP
     # ---------------------------------------------------------
 
+            
+    def clearRenderObjects(self):
+        self.makeCurrent()
 
+        for renderObject in self.renderObjects:
+            vao = renderObject[
+                "vao"
+            ]
+
+            vbo = renderObject[
+                "vbo"
+            ]
+
+            glDeleteVertexArrays(
+                1,
+                [vao]
+            )
+
+            glDeleteBuffers(
+                1,
+                [vbo]
+            )
+
+        self.renderObjects.clear()
+
+        self.doneCurrent()
+
+        self.update()
+        
     def addNewObject(self, object):
         meshPath = Path(
             object.meshPath
@@ -954,6 +984,8 @@ class OpenGLViewport(QOpenGLWidget):
                 )
             )
 
+
+            # X rotation
             model = glm.rotate(
                 model,
                 glm.radians(
@@ -965,7 +997,7 @@ class OpenGLViewport(QOpenGLWidget):
                     0.0
                 )
             )
-
+            # Y rotation
             model = glm.rotate(
                 model,
                 glm.radians(
@@ -977,7 +1009,7 @@ class OpenGLViewport(QOpenGLWidget):
                     0.0
                 )
             )
-
+            # Z rotation
             model = glm.rotate(
                 model,
                 glm.radians(

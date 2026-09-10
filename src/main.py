@@ -1,7 +1,7 @@
 import customtkinter as ctk
 from pathlib import Path
 
-from startMenu import show_start_menu
+from startMenu import showStartMenu
 from simuO import App
 
 
@@ -30,7 +30,7 @@ def startup_menu():
         / "simuo_logo.png"
     )
 
-    menu = show_start_menu(
+    menu = showStartMenu(
         parent=root,
         logo_path=logo_path,
         on_new=new_project,
@@ -62,8 +62,7 @@ def main():
     elif action == "import":
         print("Opening project:", filepath)
 
-        app = App(project_path=filepath)
-    
+        app = App(projectPath=filepath)
     app.run()
 
 

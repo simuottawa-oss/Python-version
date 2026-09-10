@@ -1,6 +1,6 @@
 import sys
 from pathlib import Path
-
+import json
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QSurfaceFormat
 from PySide6.QtWidgets import (
@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QDialogButtonBox,
     QLabel,
+    QMessageBox,
 )
 
 from scene import Scene, SceneObject
@@ -23,12 +24,7 @@ from renderer import OpenGLViewport
 
 
 class SimuOMainWindow(QMainWindow):
-
-    def __init__(
-        self,
-        projectPath=None,
-        scene=None
-    ):
+    def __init__(self, projectPath=None, scene=None):
         super().__init__()
 
         self.projectPath = projectPath
@@ -38,14 +34,9 @@ class SimuOMainWindow(QMainWindow):
 
         self.scene = scene
 
-        self.setWindowTitle(
-            "SimuO - Untitled"
-        )
+        self.setWindowTitle("SimuO - Untitled")
 
-        self.resize(
-            1280,
-            800
-        )
+        self.resize(1280, 800)
 
         self.setStyleSheet(
             """
@@ -147,23 +138,145 @@ class SimuOMainWindow(QMainWindow):
         self.createMenus()
         self.createToolbar()
 
-        self.viewport = OpenGLViewport(
-            self,
-            scene=self.scene
-        )
+        self.viewport = OpenGLViewport(self, scene=self.scene)
 
-        self.setCentralWidget(
-            self.viewport
-        )
+        self.setCentralWidget(self.viewport)
+        
+        if projectPath is not None:
+            self.loadFile(projectPath,uploadToGPU=False)
+
 
     # ---------------------------------------------------------
     # FILE OPERATIONS
     # ---------------------------------------------------------
 
+    def newProject(self):
+
+        if self.scene.sceneHasObjects():
+            response = QMessageBox.question(
+                self,
+                "New Project",
+                "The current project contains objects. "
+                "Would you like to save before creating a new project?",
+                QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
+            )
+
+            if response == QMessageBox.Cancel:
+                return
+
+            if response == QMessageBox.Save:
+                if self.projectPath is None:
+                    self.saveAsFile()
+                else:
+                    self.saveFile()
+
+                # If the user cancelled the Save dialog,
+                # don't destroy the current scene.
+                if self.projectPath is None:
+                    return
+
+        self.scene.objects.clear()
+
+        self.viewport.clearRenderObjects()
+
+        self.projectPath = None
+
+        self.setWindowTitle("SimuO - Untitled")
+
+        self.viewport.update()
+        
+        
+    def loadFile(
+        self,
+        path,
+        uploadToGPU=True
+    ):
+        with open(
+            path,
+            "r",
+            encoding="utf-8"
+        ) as file:
+            data = json.load(
+                file
+            )
+
+        self.scene.objects.clear()
+
+        if uploadToGPU:
+            self.viewport.clearRenderObjects()
+
+        for objectData in data.get(
+            "objects",
+            []
+        ):
+            sceneObject = SceneObject(
+                name=objectData["name"],
+                meshPath=Path(
+                    objectData["meshPath"]
+                )
+            )
+
+            position = objectData.get(
+                "position",
+                [0.0, 0.0, 0.0]
+            )
+
+            rotation = objectData.get(
+                "rotation",
+                [0.0, 0.0, 0.0]
+            )
+
+            scale = objectData.get(
+                "scale",
+                [1.0, 1.0, 1.0]
+            )
+
+            sceneObject.setPosition(
+                position[0],
+                position[1],
+                position[2]
+            )
+
+            sceneObject.setRotation(
+                rotation[0],
+                rotation[1],
+                rotation[2]
+            )
+
+            sceneObject.scale = [
+                scale[0],
+                scale[1],
+                scale[2]
+            ]
+
+            self.scene.addObject(
+                sceneObject
+            )
+
+            if uploadToGPU:
+                self.viewport.addNewObject(
+                    sceneObject
+                )
+
+        self.projectPath = Path(
+            path
+        )
+
+        self.setWindowTitle(
+            f"SimuO - {self.projectPath.stem}"
+        )
+
+        if uploadToGPU:
+            self.viewport.update()
+
+        print(
+            "Opened project:",
+            path
+        )
     def openFile(self):
         filePath, _ = QFileDialog.getOpenFileName(
             self,
-            "Open File",
+            "Open SimuO Project",
             "",
             "SimuO Project Files (*.simuO);;All Files (*)",
         )
@@ -171,21 +284,9 @@ class SimuOMainWindow(QMainWindow):
         if not filePath:
             return
 
-        print(
-            "Opening project:",
-            filePath
-        )
+        path = Path(filePath)
 
-        path = Path(
-            filePath
-        )
-
-        if path.suffix == ".simuO":
-            self.projectPath = path
-
-            self.setWindowTitle(
-                f"SimuO - {path.stem}"
-            )
+        self.loadFile(path, True)
 
     def importFile(self):
         filePath, _ = QFileDialog.getOpenFileName(
@@ -198,78 +299,101 @@ class SimuOMainWindow(QMainWindow):
         if not filePath:
             return
 
-        print(
-            "Importing model:",
-            filePath
+        print("Importing model:", filePath)
+
+        path = Path(filePath)
+
+        importedObject = SceneObject(name=path.stem, meshPath=path)
+
+        self.scene.addObject(importedObject)
+
+        self.viewport.addNewObject(importedObject)
+
+    def saveFile(self):
+        if self.projectPath is None:
+            filePath, _ = QFileDialog.getSaveFileName(
+                self, "Save SimuO Project", "", "SimuO Project Files (*.simuO)"
+            )
+
+            if not filePath:
+                return
+
+            path = Path(filePath)
+
+            if path.suffix.lower() != ".simuo":
+                path = path.with_suffix(".simuO")
+
+            self.projectPath = path
+
+        data = {"version": 1, "objects": []}
+
+        for sceneObject in self.scene.objects:
+            # Skip editor-only objects like the axis
+            if sceneObject.name == "Axis":
+                continue
+
+            objectData = {
+                "name": sceneObject.name,
+                "meshPath": str(sceneObject.meshPath),
+                "position": list(sceneObject.position),
+                "rotation": list(sceneObject.rotation),
+                "scale": list(sceneObject.scale),
+            }
+
+            data["objects"].append(objectData)
+
+        with open(self.projectPath, "w", encoding="utf-8") as file:
+            json.dump(data, file, indent=4)
+
+        self.setWindowTitle(f"SimuO - {self.projectPath.stem}")
+
+        print("Saved project:", self.projectPath)
+
+    def saveAsFile(self):
+        filePath, _ = QFileDialog.getSaveFileName(
+            self, "Save Scene as", "", "SimuO Project Files (*.simuO)"
         )
 
-        path = Path(
-            filePath
-        )
+        if not filePath:
+            return
 
-        importedObject = SceneObject(
-            name=path.stem,
-            meshPath=path
-        )
+        path = Path(filePath)
 
-        self.scene.addObject(
-            importedObject
-        )
+        if path.suffix.lower() != ".simuo":
+            path = path.with_suffix(".simuO")
 
-        self.viewport.addNewObject(
-            importedObject
-        )
+        self.projectPath = path
+
+        self.saveFile()
 
     # ---------------------------------------------------------
-    # REPOSITION TOOL
+    # SET ROTATION TOOL
     # ---------------------------------------------------------
+    def openSetRotationObjectList(self):
+        dialog = QDialog(self)
 
-    def openRepositionObjectList(self):
-        dialog = QDialog(
-            self
-        )
+        dialog.setWindowTitle("Set Rotation")
 
-        dialog.setWindowTitle(
-            "Reposition Object"
-        )
+        dialog.resize(350, 400)
 
-        dialog.resize(
-            350,
-            400
-        )
+        layout = QVBoxLayout(dialog)
 
-        layout = QVBoxLayout(
-            dialog
-        )
+        label = QLabel("Select an object to set rotation:")
 
-        label = QLabel(
-            "Select an object to reposition:"
-        )
-
-        layout.addWidget(
-            label
-        )
+        layout.addWidget(label)
 
         objectList = QListWidget()
 
-        layout.addWidget(
-            objectList
-        )
+        layout.addWidget(objectList)
 
         for sceneObject in self.scene.objects:
             if sceneObject.name == "Axis":
                 continue
-            objectList.addItem(
-                sceneObject.name
-            )
+            objectList.addItem(sceneObject.name)
 
-        selectButton = QPushButton(
-            "Select"
-        )
+        selectButton = QPushButton("Select")
 
-        layout.addWidget(
-            selectButton
-        )
+        layout.addWidget(selectButton)
 
         def selectObject():
             index = objectList.currentRow()
@@ -277,61 +401,174 @@ class SimuOMainWindow(QMainWindow):
             if index < 0:
                 return
 
-            sceneObject = (
-                self.scene.objects[
-                    index + 1 # Skip the axis object
-                ]
-            )
+            sceneObject = self.scene.objects[
+                index
+            ]
 
             dialog.accept()
 
-            self.openPositionDialog(
-                sceneObject
-            )
+            self.openSetRotationDialog(sceneObject)
 
-        selectButton.clicked.connect(
-            selectObject
-        )
+        selectButton.clicked.connect(selectObject)
 
-        objectList.itemDoubleClicked.connect(
-            lambda item: selectObject()
-        )
+        objectList.itemDoubleClicked.connect(lambda item: selectObject())
 
         dialog.exec()
 
-    def openPositionDialog(
-        self,
-        sceneObject
-    ):
-        dialog = QDialog(
-            self
-        )
+    def openSetRotationDialog(self, sceneObject):
+        dialog = QDialog(self)
 
-        dialog.setWindowTitle(
-            f"Reposition - {sceneObject.name}"
-        )
+        dialog.setWindowTitle(f"Reposition - {sceneObject.name}")
 
-        dialog.setMinimumWidth(
-            300
-        )
+        dialog.setMinimumWidth(300)
 
-        mainLayout = QVBoxLayout(
-            dialog
-        )
+        mainLayout = QVBoxLayout(dialog)
 
-        title = QLabel(
-            f"Position: {sceneObject.name}"
-        )
+        title = QLabel(f"Rotation (Degrees): {sceneObject.name}")
 
-        mainLayout.addWidget(
-            title
-        )
+        mainLayout.addWidget(title)
 
         formLayout = QFormLayout()
 
-        mainLayout.addLayout(
-            formLayout
-        )
+        mainLayout.addLayout(formLayout)
+        # -----------------------------------------------------
+        # X Rotation
+        # -----------------------------------------------------
+
+        xInput = QDoubleSpinBox()
+
+        xInput.setRange(0, 360.0)
+
+        xInput.setDecimals(3)
+
+        xInput.setValue(float(sceneObject.rotation[0]))
+        # -----------------------------------------------------
+        # Y Rotation
+        # -----------------------------------------------------
+
+        yInput = QDoubleSpinBox()
+
+        yInput.setRange(0, 360.0)
+
+        yInput.setDecimals(3)
+
+        yInput.setValue(float(sceneObject.rotation[1]))
+
+        # -----------------------------------------------------
+        # Z Rotation
+        # -----------------------------------------------------
+
+        zInput = QDoubleSpinBox()
+
+        zInput.setRange(0, 360.0)
+
+        zInput.setDecimals(3)
+
+        zInput.setValue(float(sceneObject.rotation[2]))
+
+        # -----------------------------------------------------
+        # Layout
+        # -----------------------------------------------------
+
+        formLayout.addRow("X:", xInput)
+
+        formLayout.addRow("Y:", yInput)
+
+        formLayout.addRow("Z:", zInput)
+
+        # -----------------------------------------------------
+        # OK / CANCEL
+        # -----------------------------------------------------
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+
+        mainLayout.addWidget(buttons)
+
+        def applyRotation():
+            x = xInput.value()
+            y = yInput.value()
+            z = zInput.value()
+
+            sceneObject.setRotation(x, y, z)
+
+            print(f"Rotated {sceneObject.name} to ({x}, {y}, {z})")
+
+            self.viewport.update()
+
+            dialog.accept()
+
+        buttons.accepted.connect(applyRotation)
+
+        buttons.rejected.connect(dialog.reject)
+
+        dialog.exec()
+
+    # ---------------------------------------------------------
+    # REPOSITION TOOL
+    # ---------------------------------------------------------
+
+    def openRepositionObjectList(self):
+        dialog = QDialog(self)
+
+        dialog.setWindowTitle("Reposition Object")
+
+        dialog.resize(350, 400)
+
+        layout = QVBoxLayout(dialog)
+
+        label = QLabel("Select an object to reposition:")
+
+        layout.addWidget(label)
+
+        objectList = QListWidget()
+
+        layout.addWidget(objectList)
+
+        for sceneObject in self.scene.objects:
+            if sceneObject.name == "Axis":
+                continue
+            objectList.addItem(sceneObject.name)
+
+        selectButton = QPushButton("Select")
+
+        layout.addWidget(selectButton)
+
+        def selectObject():
+            index = objectList.currentRow()
+
+            if index < 0:
+                return
+
+            sceneObject = self.scene.objects[
+                index
+            ]
+
+            dialog.accept()
+
+            self.openPositionDialog(sceneObject)
+
+        selectButton.clicked.connect(selectObject)
+
+        objectList.itemDoubleClicked.connect(lambda item: selectObject())
+
+        dialog.exec()
+
+    def openPositionDialog(self, sceneObject):
+        dialog = QDialog(self)
+
+        dialog.setWindowTitle(f"Reposition - {sceneObject.name}")
+
+        dialog.setMinimumWidth(300)
+
+        mainLayout = QVBoxLayout(dialog)
+
+        title = QLabel(f"Position: {sceneObject.name}")
+
+        mainLayout.addWidget(title)
+
+        formLayout = QFormLayout()
+
+        mainLayout.addLayout(formLayout)
 
         # -----------------------------------------------------
         # X POSITION
@@ -339,20 +576,11 @@ class SimuOMainWindow(QMainWindow):
 
         xInput = QDoubleSpinBox()
 
-        xInput.setRange(
-            -1000000.0,
-            1000000.0
-        )
+        xInput.setRange(-1000000.0, 1000000.0)
 
-        xInput.setDecimals(
-            3
-        )
+        xInput.setDecimals(3)
 
-        xInput.setValue(
-            float(
-                sceneObject.position[0]
-            )
-        )
+        xInput.setValue(float(sceneObject.position[0]))
 
         # -----------------------------------------------------
         # Y POSITION
@@ -360,20 +588,11 @@ class SimuOMainWindow(QMainWindow):
 
         yInput = QDoubleSpinBox()
 
-        yInput.setRange(
-            -1000000.0,
-            1000000.0
-        )
+        yInput.setRange(-1000000.0, 1000000.0)
 
-        yInput.setDecimals(
-            3
-        )
+        yInput.setDecimals(3)
 
-        yInput.setValue(
-            float(
-                sceneObject.position[1]
-            )
-        )
+        yInput.setValue(float(sceneObject.position[1]))
 
         # -----------------------------------------------------
         # Z POSITION
@@ -381,76 +600,42 @@ class SimuOMainWindow(QMainWindow):
 
         zInput = QDoubleSpinBox()
 
-        zInput.setRange(
-            -1000000.0,
-            1000000.0
-        )
+        zInput.setRange(-1000000.0, 1000000.0)
 
-        zInput.setDecimals(
-            3
-        )
+        zInput.setDecimals(3)
 
-        zInput.setValue(
-            float(
-                sceneObject.position[2]
-            )
-        )
+        zInput.setValue(float(sceneObject.position[2]))
 
-        formLayout.addRow(
-            "X:",
-            xInput
-        )
+        formLayout.addRow("X:", xInput)
 
-        formLayout.addRow(
-            "Y:",
-            yInput
-        )
+        formLayout.addRow("Y:", yInput)
 
-        formLayout.addRow(
-            "Z:",
-            zInput
-        )
+        formLayout.addRow("Z:", zInput)
 
         # -----------------------------------------------------
         # OK / CANCEL
         # -----------------------------------------------------
 
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok
-            | QDialogButtonBox.Cancel
-        )
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
 
-        mainLayout.addWidget(
-            buttons
-        )
+        mainLayout.addWidget(buttons)
 
         def applyPosition():
             x = xInput.value()
             y = yInput.value()
             z = zInput.value()
 
-            sceneObject.setPosition(
-                x,
-                y,
-                z
-            )
+            sceneObject.setPosition(x, y, z)
 
-            print(
-                f"Moved {sceneObject.name} "
-                f"to ({x}, {y}, {z})"
-            )
+            print(f"Moved {sceneObject.name} to ({x}, {y}, {z})")
 
             self.viewport.update()
 
             dialog.accept()
 
-        buttons.accepted.connect(
-            applyPosition
-        )
+        buttons.accepted.connect(applyPosition)
 
-        buttons.rejected.connect(
-            dialog.reject
-        )
+        buttons.rejected.connect(dialog.reject)
 
         dialog.exec()
 
@@ -460,72 +645,52 @@ class SimuOMainWindow(QMainWindow):
 
     def createMenus(self):
 
-        fileMenu = (
-            self.menuBar()
-            .addMenu("File")
-        )
+        fileMenu = self.menuBar().addMenu("File")
 
-        self.menuBar().addMenu(
-            "Edit"
-        )
+        self.menuBar().addMenu("Edit")
 
-        self.menuBar().addMenu(
-            "Window"
-        )
+        self.menuBar().addMenu("Window")
 
-        self.menuBar().addMenu(
-            "Help"
-        )
+        self.menuBar().addMenu("Help")
 
-        newAction = QAction(
-            "New",
-            self
-        )
+        newAction = QAction("New", self)
 
-        openAction = QAction(
-            "Open",
-            self
-        )
+        openAction = QAction("Open", self)
 
-        importAction = QAction(
-            "Import",
-            self
-        )
+        importAction = QAction("Import", self)
 
-        exitAction = QAction(
-            "Exit",
-            self
-        )
+        saveAsAction = QAction("SaveAs", self)
+        saveAction = QAction("Save", self)
+        saveAction.setShortcut("Ctrl+S")
 
-        openAction.triggered.connect(
-            self.openFile
-        )
+        saveAsAction.setShortcut("Ctrl+Shift+S")
 
-        importAction.triggered.connect(
-            self.importFile
-        )
+        exitAction = QAction("Exit", self)
+        
+        newAction.triggered.connect(self.newProject)
 
-        exitAction.triggered.connect(
-            self.close
-        )
+        openAction.triggered.connect(self.openFile)
 
-        fileMenu.addAction(
-            newAction
-        )
+        importAction.triggered.connect(self.importFile)
 
-        fileMenu.addAction(
-            openAction
-        )
+        exitAction.triggered.connect(self.close)
 
-        fileMenu.addAction(
-            importAction
-        )
+        saveAction.triggered.connect(self.saveFile)
+
+        saveAsAction.triggered.connect(self.saveAsFile)
+
+        fileMenu.addAction(newAction)
+
+        fileMenu.addAction(openAction)
+
+        fileMenu.addAction(importAction)
+
+        fileMenu.addAction(saveAsAction)
+        fileMenu.addAction(saveAction)
 
         fileMenu.addSeparator()
 
-        fileMenu.addAction(
-            exitAction
-        )
+        fileMenu.addAction(exitAction)
 
     # ---------------------------------------------------------
     # LEFT TOOLBAR
@@ -533,101 +698,59 @@ class SimuOMainWindow(QMainWindow):
 
     def createToolbar(self):
 
-        toolbar = QToolBar(
-            "Tools",
-            self
-        )
+        toolbar = QToolBar("Tools", self)
 
-        toolbar.setMovable(
-            False
-        )
+        toolbar.setMovable(False)
 
-        self.addToolBar(
-            Qt.LeftToolBarArea,
-            toolbar
-        )
+        self.addToolBar(Qt.LeftToolBarArea, toolbar)
 
         self.toolActions = []
 
         tools = [
             ("Select", "➤"),
             ("Reposition", "⇄"),
+            ("Set Rotation", "⤾"),
             ("Pan", "✋"),
             ("Rotate", "⟳"),
             ("Move", "✥"),
         ]
 
-        for index, (
-            name,
-            symbol
-        ) in enumerate(
-            tools
-        ):
+        for index, (name, symbol) in enumerate(tools):
+            action = QAction(symbol, self)
 
-            action = QAction(
-                symbol,
-                self
-            )
+            action.setToolTip(name)
 
-            action.setToolTip(
-                name
-            )
+            action.setCheckable(True)
 
-            action.setCheckable(
-                True
-            )
+            action.triggered.connect(lambda checked, n=name: self.toolSelected(n))
 
-            action.triggered.connect(
-                lambda checked,
-                n=name:
-                self.toolSelected(n)
-            )
+            toolbar.addAction(action)
 
-            toolbar.addAction(
-                action
-            )
-
-            self.toolActions.append(
-                action
-            )
+            self.toolActions.append(action)
 
             if index == 0:
-                action.setChecked(
-                    True
-                )
+                action.setChecked(True)
 
-    def toolSelected(
-        self,
-        name
-    ):
+    def toolSelected(self, name):
 
         sender = self.sender()
 
         for action in self.toolActions:
-            action.setChecked(
-                action is sender
-            )
+            action.setChecked(action is sender)
 
-        print(
-            "Selected tool:",
-            name
-        )
+        print("Selected tool:", name)
 
         if name == "Reposition":
             self.openRepositionObjectList()
 
+        if name == "Set Rotation":
+            self.openSetRotationObjectList()
+
 
 class App:
+    def __init__(self, projectPath=None, scene=None):
 
-    def __init__(
-        self,
-        projectPath=None,
-        scene=None
-    ):
-
-        self.projectPath = (
-            projectPath
-        )
+        self.projectPath = projectPath
 
         self.scene = scene
 
@@ -641,57 +764,24 @@ class App:
         # Must be configured before QApplication is created.
         surfaceFormat = QSurfaceFormat()
 
-        surfaceFormat.setVersion(
-            3,
-            3
-        )
+        surfaceFormat.setVersion(3, 3)
 
-        surfaceFormat.setProfile(
-            QSurfaceFormat.CoreProfile
-        )
+        surfaceFormat.setProfile(QSurfaceFormat.CoreProfile)
 
-        surfaceFormat.setDepthBufferSize(
-            24
-        )
+        surfaceFormat.setDepthBufferSize(24)
 
-        QSurfaceFormat.setDefaultFormat(
-            surfaceFormat
-        )
+        QSurfaceFormat.setDefaultFormat(surfaceFormat)
 
         app = QApplication.instance()
 
-        ownsApp = (
-            app is None
-        )
+        ownsApp = app is None
 
         if app is None:
-            app = QApplication(
-                sys.argv
-            )
+            app = QApplication(sys.argv)
 
-        projectRoot = (
-            Path(__file__)
-            .resolve()
-            .parent
-            .parent
-        )
 
-        axis = SceneObject(
-            name="Axis",
-            meshPath=(
-                projectRoot
-                / "axis.obj"
-            )
-        )
 
-        self.scene.addObject(
-            axis
-        )
-
-        self.window = SimuOMainWindow(
-            projectPath=self.projectPath,
-            scene=self.scene
-        )
+        self.window = SimuOMainWindow(projectPath=self.projectPath, scene=self.scene)
 
         self.window.show()
 

@@ -201,7 +201,7 @@ class SimuOStartMenu(ctk.CTkToplevel):
 
         new_button = ctk.CTkButton(
             button_frame,
-            text="New .simuO Build",
+            text="New Scene",
             command=self._new_project,
             height=38,
             corner_radius=6,
@@ -227,7 +227,7 @@ class SimuOStartMenu(ctk.CTkToplevel):
 
         import_button = ctk.CTkButton(
             button_frame,
-            text="Import Project",
+            text="Import Scene",
             command=self._import_project,
             height=38,
             corner_radius=6,
@@ -249,27 +249,6 @@ class SimuOStartMenu(ctk.CTkToplevel):
         import_button.pack(
             fill="x"
         )
-
-        # -----------------------------------------------------
-        # HINT
-        # -----------------------------------------------------
-
-        hint = ctk.CTkLabel(
-            panel,
-            text=(
-                "Import Project opens a "
-                ".simuO file from your computer."
-            ),
-            font=ctk.CTkFont(
-                size=10
-            ),
-            text_color="#777777",
-        )
-
-        hint.pack(
-            pady=(10, 12)
-        )
-
 
     def _build_text_logo(
         self,
@@ -383,7 +362,7 @@ class SimuOStartMenu(ctk.CTkToplevel):
         self.destroy()
 
 
-def show_start_menu(
+def showStartMenu(
     parent,
     logo_path=None,
     on_new=None,
@@ -447,7 +426,8 @@ if __name__ == "__main__":
 
     root.after(
         100,
-        lambda: show_start_menu(
+        lambda: showStartMenu
+(
             parent=root,
             logo_path=logo_path,
             on_new=new_project,
