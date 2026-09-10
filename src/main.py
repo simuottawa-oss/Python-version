@@ -58,13 +58,13 @@ def main():
         print("Creating new SimuO build")
 
         app = App()
-        app.run()
 
     elif action == "import":
         print("Opening project:", filepath)
 
-        app = App()
-        app.run()
+        app = App(project_path=filepath)
+    
+    app.run()
 
 
 if __name__ == "__main__":

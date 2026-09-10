@@ -1,614 +1,701 @@
-"""
-
-Controls
---------
-WASD               Move
-Right mouse + move Look around
-Space              Move up
-Left Ctrl          Move down
-Esc                Close
-
-"""
-
+import sys
 from pathlib import Path
-import math
-import time
 
-import glfw
-import glm
-import moderngl
-import numpy as np
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction, QSurfaceFormat
+from PySide6.QtWidgets import (
+    QApplication,
+    QMainWindow,
+    QToolBar,
+    QFileDialog,
+    QDialog,
+    QVBoxLayout,
+    QFormLayout,
+    QListWidget,
+    QPushButton,
+    QDoubleSpinBox,
+    QDialogButtonBox,
+    QLabel,
+)
 
-
-WINDOW_WIDTH = 1280
-WINDOW_HEIGHT = 720
-
-MOVE_SPEED = 10.0
-MOUSE_SENSITIVITY = 0.12
-
-
-VERTEX_SHADER = """
-#version 330
-
-in vec3 in_position;
-in vec3 in_normal;
-
-uniform mat4 model;
-uniform mat4 view;
-uniform mat4 projection;
-
-out vec3 frag_position;
-out vec3 frag_normal;
-
-void main() {
-    vec4 world_position = model * vec4(in_position, 1.0);
-
-    frag_position = world_position.xyz;
-    frag_normal = mat3(transpose(inverse(model))) * in_normal;
-
-    gl_Position =
-        projection *
-        view *
-        world_position;
-}
-"""
+from scene import Scene, SceneObject
+from renderer import OpenGLViewport
 
 
-FRAGMENT_SHADER = """
-#version 330
+class SimuOMainWindow(QMainWindow):
 
-in vec3 frag_position;
-in vec3 frag_normal;
+    def __init__(
+        self,
+        projectPath=None,
+        scene=None
+    ):
+        super().__init__()
 
-uniform vec3 camera_position;
+        self.projectPath = projectPath
 
-out vec4 frag_color;
+        if scene is None:
+            scene = Scene()
 
-void main() {
-    vec3 normal = normalize(frag_normal);
+        self.scene = scene
 
-    // Camera-following light:
-    // light position is the camera position.
-    vec3 light_direction =
-        normalize(camera_position - frag_position);
+        self.setWindowTitle(
+            "SimuO - Untitled"
+        )
 
-    float diffuse =
-        max(dot(normal, light_direction), 0.0);
+        self.resize(
+            1280,
+            800
+        )
 
-    // Small ambient component so faces never become completely black.
-    float ambient = 0.18;
+        self.setStyleSheet(
+            """
+            QMainWindow {
+                background-color: #2b2b2b;
+            }
 
-    float brightness =
-        min(ambient + diffuse * 0.82, 1.0);
+            QMenuBar {
+                background-color: #222222;
+                color: #e8e8e8;
+            }
 
-    vec3 base_color = vec3(0.72, 0.76, 0.82);
+            QMenuBar::item {
+                padding: 6px 12px;
+            }
 
-    frag_color = vec4(
-        base_color * brightness,
-        1.0
-    );
-}
-"""
+            QMenuBar::item:selected {
+                background-color: #3a3a3a;
+            }
 
+            QMenu {
+                background-color: #2b2b2b;
+                color: #eeeeee;
+            }
 
-def load_obj_flat_shaded(filename):
-    """
-    Loads OBJ positions and creates a flat normal for each triangle.
+            QMenu::item:selected {
+                background-color: #444444;
+            }
 
-    Output layout per vertex:
-        x, y, z, nx, ny, nz
-    """
-    positions = []
-    output = []
+            QToolBar {
+                background-color: #292929;
+                border: none;
+                spacing: 6px;
+                padding: 8px;
+            }
 
-    with open(filename, "r", encoding="utf-8", errors="ignore") as file:
-        for line in file:
-            data = line.split()
+            QToolButton {
+                color: white;
+                background-color: #343434;
+                border: 1px solid #666666;
+                border-radius: 3px;
+                min-width: 34px;
+                min-height: 34px;
+                font-size: 17px;
+            }
 
-            if not data:
+            QToolButton:hover {
+                background-color: #484848;
+            }
+
+            QToolButton:checked {
+                background-color: #595959;
+            }
+
+            QDialog {
+                background-color: #2b2b2b;
+                color: white;
+            }
+
+            QLabel {
+                color: white;
+            }
+
+            QListWidget {
+                background-color: #222222;
+                color: white;
+                border: 1px solid #555555;
+            }
+
+            QListWidget::item {
+                padding: 7px;
+            }
+
+            QListWidget::item:selected {
+                background-color: #4a4a4a;
+            }
+
+            QPushButton {
+                background-color: #3a3a3a;
+                color: white;
+                border: 1px solid #666666;
+                padding: 7px;
+                border-radius: 3px;
+            }
+
+            QPushButton:hover {
+                background-color: #505050;
+            }
+
+            QDoubleSpinBox {
+                background-color: #222222;
+                color: white;
+                border: 1px solid #666666;
+                padding: 5px;
+            }
+            """
+        )
+
+        self.createMenus()
+        self.createToolbar()
+
+        self.viewport = OpenGLViewport(
+            self,
+            scene=self.scene
+        )
+
+        self.setCentralWidget(
+            self.viewport
+        )
+
+    # ---------------------------------------------------------
+    # FILE OPERATIONS
+    # ---------------------------------------------------------
+
+    def openFile(self):
+        filePath, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open File",
+            "",
+            "SimuO Project Files (*.simuO);;All Files (*)",
+        )
+
+        if not filePath:
+            return
+
+        print(
+            "Opening project:",
+            filePath
+        )
+
+        path = Path(
+            filePath
+        )
+
+        if path.suffix == ".simuO":
+            self.projectPath = path
+
+            self.setWindowTitle(
+                f"SimuO - {path.stem}"
+            )
+
+    def importFile(self):
+        filePath, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import File",
+            "",
+            "3D Model Files (*.obj);;All Files (*)",
+        )
+
+        if not filePath:
+            return
+
+        print(
+            "Importing model:",
+            filePath
+        )
+
+        path = Path(
+            filePath
+        )
+
+        importedObject = SceneObject(
+            name=path.stem,
+            meshPath=path
+        )
+
+        self.scene.addObject(
+            importedObject
+        )
+
+        self.viewport.addNewObject(
+            importedObject
+        )
+
+    # ---------------------------------------------------------
+    # REPOSITION TOOL
+    # ---------------------------------------------------------
+
+    def openRepositionObjectList(self):
+        dialog = QDialog(
+            self
+        )
+
+        dialog.setWindowTitle(
+            "Reposition Object"
+        )
+
+        dialog.resize(
+            350,
+            400
+        )
+
+        layout = QVBoxLayout(
+            dialog
+        )
+
+        label = QLabel(
+            "Select an object to reposition:"
+        )
+
+        layout.addWidget(
+            label
+        )
+
+        objectList = QListWidget()
+
+        layout.addWidget(
+            objectList
+        )
+
+        for sceneObject in self.scene.objects:
+            if sceneObject.name == "Axis":
                 continue
+            objectList.addItem(
+                sceneObject.name
+            )
 
-            if data[0] == "v":
-                positions.append(
-                    np.array(
-                        [
-                            float(data[1]),
-                            float(data[2]),
-                            float(data[3]),
-                        ],
-                        dtype=np.float32,
-                    )
+        selectButton = QPushButton(
+            "Select"
+        )
+
+        layout.addWidget(
+            selectButton
+        )
+
+        def selectObject():
+            index = objectList.currentRow()
+
+            if index < 0:
+                return
+
+            sceneObject = (
+                self.scene.objects[
+                    index + 1 # Skip the axis object
+                ]
+            )
+
+            dialog.accept()
+
+            self.openPositionDialog(
+                sceneObject
+            )
+
+        selectButton.clicked.connect(
+            selectObject
+        )
+
+        objectList.itemDoubleClicked.connect(
+            lambda item: selectObject()
+        )
+
+        dialog.exec()
+
+    def openPositionDialog(
+        self,
+        sceneObject
+    ):
+        dialog = QDialog(
+            self
+        )
+
+        dialog.setWindowTitle(
+            f"Reposition - {sceneObject.name}"
+        )
+
+        dialog.setMinimumWidth(
+            300
+        )
+
+        mainLayout = QVBoxLayout(
+            dialog
+        )
+
+        title = QLabel(
+            f"Position: {sceneObject.name}"
+        )
+
+        mainLayout.addWidget(
+            title
+        )
+
+        formLayout = QFormLayout()
+
+        mainLayout.addLayout(
+            formLayout
+        )
+
+        # -----------------------------------------------------
+        # X POSITION
+        # -----------------------------------------------------
+
+        xInput = QDoubleSpinBox()
+
+        xInput.setRange(
+            -1000000.0,
+            1000000.0
+        )
+
+        xInput.setDecimals(
+            3
+        )
+
+        xInput.setValue(
+            float(
+                sceneObject.position[0]
+            )
+        )
+
+        # -----------------------------------------------------
+        # Y POSITION
+        # -----------------------------------------------------
+
+        yInput = QDoubleSpinBox()
+
+        yInput.setRange(
+            -1000000.0,
+            1000000.0
+        )
+
+        yInput.setDecimals(
+            3
+        )
+
+        yInput.setValue(
+            float(
+                sceneObject.position[1]
+            )
+        )
+
+        # -----------------------------------------------------
+        # Z POSITION
+        # -----------------------------------------------------
+
+        zInput = QDoubleSpinBox()
+
+        zInput.setRange(
+            -1000000.0,
+            1000000.0
+        )
+
+        zInput.setDecimals(
+            3
+        )
+
+        zInput.setValue(
+            float(
+                sceneObject.position[2]
+            )
+        )
+
+        formLayout.addRow(
+            "X:",
+            xInput
+        )
+
+        formLayout.addRow(
+            "Y:",
+            yInput
+        )
+
+        formLayout.addRow(
+            "Z:",
+            zInput
+        )
+
+        # -----------------------------------------------------
+        # OK / CANCEL
+        # -----------------------------------------------------
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.Ok
+            | QDialogButtonBox.Cancel
+        )
+
+        mainLayout.addWidget(
+            buttons
+        )
+
+        def applyPosition():
+            x = xInput.value()
+            y = yInput.value()
+            z = zInput.value()
+
+            sceneObject.setPosition(
+                x,
+                y,
+                z
+            )
+
+            print(
+                f"Moved {sceneObject.name} "
+                f"to ({x}, {y}, {z})"
+            )
+
+            self.viewport.update()
+
+            dialog.accept()
+
+        buttons.accepted.connect(
+            applyPosition
+        )
+
+        buttons.rejected.connect(
+            dialog.reject
+        )
+
+        dialog.exec()
+
+    # ---------------------------------------------------------
+    # MENUS
+    # ---------------------------------------------------------
+
+    def createMenus(self):
+
+        fileMenu = (
+            self.menuBar()
+            .addMenu("File")
+        )
+
+        self.menuBar().addMenu(
+            "Edit"
+        )
+
+        self.menuBar().addMenu(
+            "Window"
+        )
+
+        self.menuBar().addMenu(
+            "Help"
+        )
+
+        newAction = QAction(
+            "New",
+            self
+        )
+
+        openAction = QAction(
+            "Open",
+            self
+        )
+
+        importAction = QAction(
+            "Import",
+            self
+        )
+
+        exitAction = QAction(
+            "Exit",
+            self
+        )
+
+        openAction.triggered.connect(
+            self.openFile
+        )
+
+        importAction.triggered.connect(
+            self.importFile
+        )
+
+        exitAction.triggered.connect(
+            self.close
+        )
+
+        fileMenu.addAction(
+            newAction
+        )
+
+        fileMenu.addAction(
+            openAction
+        )
+
+        fileMenu.addAction(
+            importAction
+        )
+
+        fileMenu.addSeparator()
+
+        fileMenu.addAction(
+            exitAction
+        )
+
+    # ---------------------------------------------------------
+    # LEFT TOOLBAR
+    # ---------------------------------------------------------
+
+    def createToolbar(self):
+
+        toolbar = QToolBar(
+            "Tools",
+            self
+        )
+
+        toolbar.setMovable(
+            False
+        )
+
+        self.addToolBar(
+            Qt.LeftToolBarArea,
+            toolbar
+        )
+
+        self.toolActions = []
+
+        tools = [
+            ("Select", "➤"),
+            ("Reposition", "⇄"),
+            ("Pan", "✋"),
+            ("Rotate", "⟳"),
+            ("Move", "✥"),
+        ]
+
+        for index, (
+            name,
+            symbol
+        ) in enumerate(
+            tools
+        ):
+
+            action = QAction(
+                symbol,
+                self
+            )
+
+            action.setToolTip(
+                name
+            )
+
+            action.setCheckable(
+                True
+            )
+
+            action.triggered.connect(
+                lambda checked,
+                n=name:
+                self.toolSelected(n)
+            )
+
+            toolbar.addAction(
+                action
+            )
+
+            self.toolActions.append(
+                action
+            )
+
+            if index == 0:
+                action.setChecked(
+                    True
                 )
 
-            elif data[0] == "f":
-                # OBJ faces can have 3+ vertices.
-                # Convert the polygon to triangles using a triangle fan.
-                indices = []
+    def toolSelected(
+        self,
+        name
+    ):
 
-                for token in data[1:]:
-                    vertex_index = int(token.split("/")[0])
+        sender = self.sender()
 
-                    # OBJ allows negative indices.
-                    if vertex_index < 0:
-                        vertex_index = len(positions) + vertex_index
-                    else:
-                        vertex_index -= 1
-
-                    indices.append(vertex_index)
-
-                for i in range(1, len(indices) - 1):
-                    p0 = positions[indices[0]]
-                    p1 = positions[indices[i]]
-                    p2 = positions[indices[i + 1]]
-
-                    edge1 = p1 - p0
-                    edge2 = p2 - p0
-
-                    normal = np.cross(edge1, edge2)
-
-                    length = np.linalg.norm(normal)
-
-                    if length > 0.0:
-                        normal = normal / length
-                    else:
-                        normal = np.array(
-                            [0.0, 1.0, 0.0],
-                            dtype=np.float32,
-                        )
-
-                    for point in (p0, p1, p2):
-                        output.extend(
-                            [
-                                point[0],
-                                point[1],
-                                point[2],
-                                normal[0],
-                                normal[1],
-                                normal[2],
-                            ]
-                        )
-
-    return np.array(
-        output,
-        dtype=np.float32,
-    )
-
-
-class Camera:
-    def __init__(self):
-        # axis.obj is centered roughly around the origin and extends
-        # about 10-12 units in each axis, so start farther back.
-        self.position = glm.vec3(0.0, 2.0, 28.0)
-
-        # Standard OpenGL-style camera:
-        # yaw -90 degrees points approximately along -Z.
-        self.yaw = -90.0
-        self.pitch = 0.0
-
-        self.front = glm.vec3(0.0, 0.0, -1.0)
-        self.world_up = glm.vec3(0.0, 1.0, 0.0)
-
-        self.right = glm.vec3(1.0, 0.0, 0.0)
-        self.up = glm.vec3(0.0, 1.0, 0.0)
-
-        self.update_vectors()
-
-    def update_vectors(self):
-        yaw_radians = math.radians(self.yaw)
-        pitch_radians = math.radians(self.pitch)
-
-        front = glm.vec3(
-            math.cos(yaw_radians) * math.cos(pitch_radians),
-            math.sin(pitch_radians),
-            math.sin(yaw_radians) * math.cos(pitch_radians),
-        )
-
-        self.front = glm.normalize(front)
-
-        self.right = glm.normalize(
-            glm.cross(
-                self.front,
-                self.world_up,
+        for action in self.toolActions:
+            action.setChecked(
+                action is sender
             )
+
+        print(
+            "Selected tool:",
+            name
         )
 
-        self.up = glm.normalize(
-            glm.cross(
-                self.right,
-                self.front,
-            )
-        )
-
-    def rotate(self, delta_x, delta_y):
-        self.yaw += delta_x * MOUSE_SENSITIVITY
-        self.pitch += delta_y * MOUSE_SENSITIVITY
-
-        # Prevent camera inversion at the vertical poles.
-        self.pitch = max(
-            -89.0,
-            min(89.0, self.pitch),
-        )
-
-        self.update_vectors()
-
-    def get_view_matrix(self):
-        return glm.lookAt(
-            self.position,
-            self.position + self.front,
-            self.up,
-        )
+        if name == "Reposition":
+            self.openRepositionObjectList()
 
 
 class App:
-    def __init__(self):
-        if not glfw.init():
-            raise RuntimeError("GLFW could not be initialized.")
 
-        glfw.window_hint(
-            glfw.CONTEXT_VERSION_MAJOR,
-            3,
-        )
-        glfw.window_hint(
-            glfw.CONTEXT_VERSION_MINOR,
-            3,
-        )
-        glfw.window_hint(
-            glfw.OPENGL_PROFILE,
-            glfw.OPENGL_CORE_PROFILE,
-        )
-
-        self.window = glfw.create_window(
-            WINDOW_WIDTH,
-            WINDOW_HEIGHT,
-            "SimuO - OpenGL Test",
-            None,
-            None,
-        )
-
-        if not self.window:
-            glfw.terminate()
-            raise RuntimeError(
-                "GLFW could not create an OpenGL window."
-            )
-
-        glfw.make_context_current(self.window)
-
-        # 1 = VSync on.
-        # Change to 0 later if you want uncapped benchmarking.
-        glfw.swap_interval(1)
-
-        self.ctx = moderngl.create_context()
-
-        self.ctx.enable(
-            moderngl.DEPTH_TEST
-        )
-
-        # Don't enable face culling yet.
-        # It avoids winding-order surprises while validating the OBJ loader.
-
-        self.program = self.ctx.program(
-            vertex_shader=VERTEX_SHADER,
-            fragment_shader=FRAGMENT_SHADER,
-        )
-
-        project_root = (
-            Path(__file__).resolve().parent.parent
-        )
-
-        obj_path = (
-            project_root
-            / "screw.obj"
-        )
-
-        if not obj_path.exists():
-            raise FileNotFoundError(
-                f"Could not find screw.obj at: {obj_path}"
-            )
-
-        vertex_data = load_obj_flat_shaded(
-            obj_path
-        )
-
-        print(
-            f"Loaded {len(vertex_data) // 6:,} vertices "
-            f"({len(vertex_data) // 18:,} triangles)"
-        )
-
-        self.vbo = self.ctx.buffer(
-            vertex_data.tobytes()
-        )
-
-        self.vao = self.ctx.vertex_array(
-            self.program,
-            [
-                (
-                    self.vbo,
-                    "3f 3f",
-                    "in_position",
-                    "in_normal",
-                )
-            ],
-        )
-
-        self.camera = Camera()
-
-        self.right_mouse_down = False
-        self.first_mouse_event = True
-        self.last_mouse_x = 0.0
-        self.last_mouse_y = 0.0
-
-        glfw.set_cursor_pos_callback(
-            self.window,
-            self.on_mouse_move,
-        )
-
-        glfw.set_mouse_button_callback(
-            self.window,
-            self.on_mouse_button,
-        )
-
-        glfw.set_framebuffer_size_callback(
-            self.window,
-            self.on_resize,
-        )
-
-        self.last_time = time.perf_counter()
-
-    def on_resize(
+    def __init__(
         self,
-        window,
-        width,
-        height,
+        projectPath=None,
+        scene=None
     ):
-        if width <= 0 or height <= 0:
-            return
 
-        self.ctx.viewport = (
-            0,
-            0,
-            width,
-            height,
+        self.projectPath = (
+            projectPath
         )
 
-    def on_mouse_button(
-        self,
-        window,
-        button,
-        action,
-        mods,
-    ):
-        if button != glfw.MOUSE_BUTTON_RIGHT:
-            return
+        self.scene = scene
 
-        if action == glfw.PRESS:
-            self.right_mouse_down = True
-            self.first_mouse_event = True
+        self.window = None
 
-            # GLFW gives us proper captured relative-style mouse movement.
-            # No ctypes cursor warping is needed.
-            glfw.set_input_mode(
-                self.window,
-                glfw.CURSOR,
-                glfw.CURSOR_DISABLED,
-            )
-
-        elif action == glfw.RELEASE:
-            self.right_mouse_down = False
-            self.first_mouse_event = True
-
-            glfw.set_input_mode(
-                self.window,
-                glfw.CURSOR,
-                glfw.CURSOR_NORMAL,
-            )
-
-    def on_mouse_move(
-        self,
-        window,
-        xpos,
-        ypos,
-    ):
-        if not self.right_mouse_down:
-            return
-
-        if self.first_mouse_event:
-            self.last_mouse_x = xpos
-            self.last_mouse_y = ypos
-            self.first_mouse_event = False
-            return
-
-        delta_x = xpos - self.last_mouse_x
-
-        # Screen y increases downward, so reverse this.
-        delta_y = self.last_mouse_y - ypos
-
-        self.last_mouse_x = xpos
-        self.last_mouse_y = ypos
-
-        self.camera.rotate(
-            delta_x,
-            delta_y,
-        )
-
-    def update(self, delta_time):
-        speed = MOVE_SPEED * delta_time
-
-        if glfw.get_key(
-            self.window,
-            glfw.KEY_W,
-        ) == glfw.PRESS:
-            self.camera.position += (
-                self.camera.front * speed
-            )
-
-        if glfw.get_key(
-            self.window,
-            glfw.KEY_S,
-        ) == glfw.PRESS:
-            self.camera.position -= (
-                self.camera.front * speed
-            )
-
-        if glfw.get_key(
-            self.window,
-            glfw.KEY_D,
-        ) == glfw.PRESS:
-            self.camera.position += (
-                self.camera.right * speed
-            )
-
-        if glfw.get_key(
-            self.window,
-            glfw.KEY_A,
-        ) == glfw.PRESS:
-            self.camera.position -= (
-                self.camera.right * speed
-            )
-
-        if glfw.get_key(
-            self.window,
-            glfw.KEY_SPACE,
-        ) == glfw.PRESS:
-            self.camera.position += (
-                self.camera.world_up * speed
-            )
-
-        if (
-            glfw.get_key(
-                self.window,
-                glfw.KEY_LEFT_CONTROL,
-            )
-            == glfw.PRESS
-        ):
-            self.camera.position -= (
-                self.camera.world_up * speed
-            )
-
-        if glfw.get_key(
-            self.window,
-            glfw.KEY_ESCAPE,
-        ) == glfw.PRESS:
-            glfw.set_window_should_close(
-                self.window,
-                True,
-            )
-
-    def render(self):
-        startTime = time.time()
-        framebuffer_width, framebuffer_height = (
-            glfw.get_framebuffer_size(
-                self.window
-            )
-        )
-
-        if (
-            framebuffer_width <= 0
-            or framebuffer_height <= 0
-        ):
-            return
-
-        self.ctx.viewport = (
-            0,
-            0,
-            framebuffer_width,
-            framebuffer_height,
-        )
-
-        self.ctx.clear(
-            0.035,
-            0.035,
-            0.045,
-            1.0,
-            depth=1.0,
-        )
-
-        aspect = (
-            framebuffer_width
-            / framebuffer_height
-        )
-
-        projection = glm.perspective(
-            glm.radians(60.0),
-            aspect,
-            0.1,
-            1000.0,
-        )
-
-        view = self.camera.get_view_matrix()
-
-        model = glm.mat4(1.0)
-
-        self.program["model"].write(
-            model.to_bytes()
-        )
-
-        self.program["view"].write(
-            view.to_bytes()
-        )
-
-        self.program["projection"].write(
-            projection.to_bytes()
-        )
-
-        self.program[
-            "camera_position"
-        ].value = (
-            self.camera.position.x,
-            self.camera.position.y,
-            self.camera.position.z,
-        )
-
-        self.vao.render(
-            mode=moderngl.TRIANGLES
-        )
-        renderTime = time.time()
-        print(f"Render time: {(renderTime - startTime) * 1000:f} ms")
+        if self.scene is None:
+            self.scene = Scene()
 
     def run(self):
-        while not glfw.window_should_close(
-            self.window
-        ):
-            current_time = time.perf_counter()
 
-            delta_time = (
-                current_time
-                - self.last_time
+        # Must be configured before QApplication is created.
+        surfaceFormat = QSurfaceFormat()
+
+        surfaceFormat.setVersion(
+            3,
+            3
+        )
+
+        surfaceFormat.setProfile(
+            QSurfaceFormat.CoreProfile
+        )
+
+        surfaceFormat.setDepthBufferSize(
+            24
+        )
+
+        QSurfaceFormat.setDefaultFormat(
+            surfaceFormat
+        )
+
+        app = QApplication.instance()
+
+        ownsApp = (
+            app is None
+        )
+
+        if app is None:
+            app = QApplication(
+                sys.argv
             )
 
-            self.last_time = current_time
+        projectRoot = (
+            Path(__file__)
+            .resolve()
+            .parent
+            .parent
+        )
 
-            # Avoid giant jumps after debugging / dragging the window.
-            delta_time = min(
-                delta_time,
-                0.1,
+        axis = SceneObject(
+            name="Axis",
+            meshPath=(
+                projectRoot
+                / "axis.obj"
             )
+        )
 
-            glfw.poll_events()
+        self.scene.addObject(
+            axis
+        )
 
-            self.update(
-                delta_time
-            )
+        self.window = SimuOMainWindow(
+            projectPath=self.projectPath,
+            scene=self.scene
+        )
 
-            self.render()
+        self.window.show()
 
-            glfw.swap_buffers(
-                self.window
-            )
+        if ownsApp:
+            return app.exec()
 
-        self.close()
-
-    def close(self):
-        try:
-            self.vao.release()
-            self.vbo.release()
-            self.program.release()
-        finally:
-            glfw.destroy_window(
-                self.window
-            )
-
-            glfw.terminate()
-
-
-if __name__ == "__main__":
-    App().run()
+        return 0
