@@ -1,4 +1,16 @@
+<<<<<<< HEAD
 Cython
 customtkinter
 numpy
 setuptools
+=======
+PySide6
+PyOpenGL
+PyGLM
+numpy
+customtkinter
+Pillow
+moderngl
+glfw
+Cython
+>>>>>>> OpenGL-Version
