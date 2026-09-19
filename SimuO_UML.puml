@@ -1,0 +1,179 @@
+@startuml SimuO_Architecture
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam classBackgroundColor #F0F0F0
+skinparam classBorderColor #333333
+skinparam arrowColor #333333
+
+' Core Application Layer
+package "Application" {
+    class App {
+        -projectPath: str
+        -scene: Scene
+        -window: SimuOMainWindow
+        +__init__(projectPath, scene)
+        +run()
+    }
+
+    class SimuOMainWindow {
+        -projectPath: str
+        -scene: Scene
+        -viewport: OpenGLViewport
+        -toolActions: List[QAction]
+        +newProject()
+        +openFile()
+        +loadFile(path)
+        +saveFile()
+        +saveAsFile()
+        +importFile()
+        +openRepositionObjectList()
+        +openPositionDialog()
+        +openSetRotationObjectList()
+        +openSetRotationDialog()
+        +createMenus()
+        +createToolbar()
+        +toolSelected(name)
+    }
+
+    class SimuOStartMenu {
+        -parent: QWidget
+        -on_new: Callable
+        -on_import: Callable
+        +_build_ui()
+        +_build_text_logo()
+        +_center_on_screen()
+        +_new_project()
+        +_import_project()
+    }
+}
+
+' Scene & Object Layer
+package "Scene Management" {
+    class Scene {
+        -filepath: str
+        -objects: List[SceneObject]
+        -dirty: bool
+        +addObject(obj: SceneObject)
+        +removeObject(obj: SceneObject)
+        +sceneHasObjects(): bool
+        +getObjects(): List[SceneObject]
+        +saveToJSON(path)
+        +loadFromJSON(path)
+    }
+
+    class SceneObject {
+        -name: str
+        -meshPath: str
+        -position: Vector3(x, y, z)
+        -rotation: Vector3(x, y, z)
+        -scale: Vector3(x, y, z)
+        -velocity: Vector3(x, y, z)
+        -acceleration: Vector3(x, y, z)
+        -angularVelocity: Vector3(x, y, z)
+        +setPosition(x, y, z)
+        +setRotation(x, y, z)
+        +setScale(x, y, z)
+        +setVelocity(x, y, z)
+        +setAcceleration(x, y, z)
+        +setAngularVelocity(x, y, z)
+        +getPosition(): Vector3
+        +getRotation(): Vector3
+        +getScale(): Vector3
+    }
+}
+
+' Rendering Layer
+package "Rendering" {
+    class OpenGLViewport {
+        -scene: Scene
+        -camera: Camera
+        -renderObjects: List[RenderObject]
+        -shader: GLuint
+        -axisShader: GLuint
+        -keys: Set[int]
+        -right_mouse_down: bool
+        -timer: QTimer
+        +initializeGL()
+        +resizeGL(width, height)
+        +paintGL()
+        +addNewObject(object: SceneObject)
+        +clearRenderObjects()
+        +update_camera(delta_time)
+        #keyPressEvent(event)
+        #keyReleaseEvent(event)
+        #mousePressEvent(event)
+        #mouseMoveEvent(event)
+        #mouseReleaseEvent(event)
+        -center_mouse()
+        -loadObjFlatShaded(path): RenderObject
+        -compileShader(source, shaderType): GLuint
+        -renderAxis()
+        -renderObjects()
+    }
+
+    class Camera {
+        -position: Vector3
+        -yaw: float
+        -pitch: float
+        -front: Vector3
+        -right: Vector3
+        -up: Vector3
+        -world_up: Vector3
+        +update_vectors()
+        +rotate(dx, dy, sensitivity)
+        +move_forward(delta)
+        +move_left(delta)
+        +move_up(delta)
+        +view_matrix(): Matrix4x4
+        +getPosition(): Vector3
+    }
+
+    class RenderObject {
+        -vao: GLuint
+        -vbo: GLuint
+        -ebo: GLuint
+        -vertexCount: int
+        -vertices: List[float]
+        -normals: List[float]
+    }
+}
+
+' Relationships
+App "1" --> "1" SimuOMainWindow : creates
+App "1" --> "1" Scene : manages
+SimuOMainWindow "1" --> "1" OpenGLViewport : contains
+SimuOMainWindow "1" --> "1" Scene : displays
+SimuOStartMenu "1" --> "1" App : launches
+
+Scene "1" --> "*" SceneObject : contains
+OpenGLViewport "1" --> "1" Camera : uses
+OpenGLViewport "1" --> "1" Scene : renders
+OpenGLViewport "1" --> "*" RenderObject : manages
+OpenGLViewport "*" --> "*" SceneObject : loads from
+
+' Data Flow
+note right of Scene
+  Stores 3D object metadata
+  (positions, rotations, scales)
+  Persists to JSON format
+end note
+
+note right of OpenGLViewport
+  Renders scene using OpenGL
+  Handles user input for camera
+  Manages GPU resources (VAO/VBO)
+end note
+
+note bottom of SimuOMainWindow
+  Main UI controller
+  Handles file operations
+  Coordinates between Scene and Viewport
+end note
+
+note left of Camera
+  Manages 3D camera view
+  Supports free-look navigation
+  Calculates view matrix for rendering
+end note
+
+@enduml

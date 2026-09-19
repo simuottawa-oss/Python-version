@@ -1,0 +1,75 @@
+@startuml SimuO_Workflows
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam sequenceArrowColor #333333
+
+title SimuO Project Workflows
+
+== New Project Workflow ==
+participant User
+participant "StartMenu" as sm
+participant "App" as app
+participant "MainWindow" as mw
+participant "Scene" as scene
+participant "Viewport" as vp
+
+User -> sm: Click "New Project"
+sm -> app: Create App(projectPath=None)
+app -> mw: Create SimuOMainWindow
+app -> scene: Create Scene()
+mw -> vp: Create OpenGLViewport
+mw -> vp: Initialize OpenGL
+User -> mw: Add object (UI button)
+mw -> scene: scene.addObject(SceneObject)
+scene -> vp: viewport.addNewObject(obj)
+vp -> vp: loadObjFlatShaded(meshPath)
+vp -> vp: Create VAO/VBO/EBO
+mw -> vp: paintGL() in render loop
+vp -> vp: Render objects + axis
+
+== Save Project Workflow ==
+User -> mw: File → Save As
+mw -> scene: Extract objects data
+scene -> mw: Return objects with\ntransforms
+mw -> mw: Generate JSON structure
+mw -> mw: Write to *.simuO file
+mw -> mw: Update window title
+
+== Load Project Workflow ==
+User -> mw: File → Open
+mw -> mw: File dialog
+User -> mw: Select *.simuO file
+mw -> mw: Parse JSON
+mw -> scene: Clear scene
+mw -> scene: scene.addObject() x N
+scene -> vp: viewport.addNewObject()\nfor each object
+vp -> vp: Load mesh + GPU resources
+mw -> vp: paintGL() renders loaded scene
+
+== Object Manipulation Workflow ==
+User -> mw: Select "Reposition Tool"
+mw -> mw: toolSelected("reposition")
+User -> mw: Click on object
+mw -> mw: openPositionDialog()
+User -> mw: Set x, y, z values
+mw -> scene: object.setPosition(x, y, z)
+scene -> scene: Update position property
+mw -> vp: Trigger repaint
+vp -> vp: Apply model transform\n(translate × rotate × scale)
+vp -> vp: paintGL() renders updated scene
+
+== Camera Navigation Workflow ==
+User -> vp: Press W/A/S/D keys
+vp -> vp: keyPressEvent()
+vp -> vp: Add key to pressed keys set
+vp -> vp: In render loop:\nupdate_camera(delta_time)
+vp -> vp: Move camera based on keys
+User -> vp: Right-click + drag mouse
+vp -> vp: mouseMoveEvent()
+vp -> vp: Calculate mouse delta
+vp -> vp: camera.rotate(dx, dy)
+vp -> vp: Update camera yaw/pitch
+vp -> vp: Recalculate view matrix
+mw -> vp: paintGL() renders\nfrom new camera pos
+
+@enduml

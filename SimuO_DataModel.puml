@@ -1,0 +1,152 @@
+@startuml SimuO_DataModel
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam classBackgroundColor #F8F8F8
+skinparam classBorderColor #333333
+skinparam arrowColor #333333
+
+title SimuO Data Model & File Structure
+
+package "Runtime Data Model" {
+    class App {
+        projectPath: str
+        scene: Scene
+    }
+
+    class Scene {
+        filepath: str
+        objects: List[SceneObject]
+        dirty: bool
+    }
+
+    class SceneObject {
+        {field} Transform Properties
+        name: str
+        meshPath: str
+        position: (x: float, y: float, z: float)
+        rotation: (x: float, y: float, z: float)
+        scale: (x: float, y: float, z: float)
+        
+        {field} Physics Properties
+        velocity: (x: float, y: float, z: float)
+        acceleration: (x: float, y: float, z: float)
+        angularVelocity: (x: float, y: float, z: float)
+    }
+
+    class Vector3 {
+        x: float
+        y: float
+        z: float
+    }
+}
+
+package "File Formats" {
+    class ProjectFile {
+        {file} filename: *.simuO
+        {field} content: JSON
+        ---
+        version: str
+        name: str
+        objects: List[ObjectEntry]
+        metadata: dict
+    }
+
+    class ObjectEntry {
+        {field} JSON Object
+        name: str
+        meshPath: str
+        position: [x, y, z]
+        rotation: [x, y, z]
+        scale: [x, y, z]
+        velocity: [x, y, z]
+        acceleration: [x, y, z]
+        angularVelocity: [x, y, z]
+    }
+
+    class MeshFile {
+        {file} filename: *.simuOPart
+        {field} format: OBJ
+        content: Wavefront OBJ
+        ---
+        Contains:
+        - Vertex positions (v)
+        - Vertex normals (vn)
+        - Triangular faces (f)
+        - Flat-shaded geometry
+    }
+}
+
+package "GPU Resources" {
+    class RenderObject {
+        vao: GLuint
+        vbo: GLuint
+        ebo: GLuint
+        vertexCount: int
+        vertices: float[]
+        normals: float[]
+    }
+
+    class Shader {
+        program: GLuint
+        vertexShader: GLuint
+        fragmentShader: GLuint
+        uniforms: dict
+    }
+}
+
+' Relationships
+App "1" --> "1" Scene : contains
+Scene "1" --> "*" SceneObject : owns
+SceneObject "1" --> "1" Vector3 : position
+SceneObject "1" --> "1" Vector3 : rotation
+SceneObject "1" --> "1" Vector3 : scale
+SceneObject "1" --> "1" Vector3 : velocity
+SceneObject "1" --> "1" Vector3 : acceleration
+SceneObject "1" --> "1" Vector3 : angularVelocity
+
+ProjectFile "1" --> "*" ObjectEntry : contains
+ObjectEntry "1" --> "1" SceneObject : represents
+ProjectFile "1" --> "1" App : persists
+
+SceneObject "1" --> "1" MeshFile : references
+MeshFile "1" --> "1" RenderObject : loads to
+
+' Serialization notes
+note right of ProjectFile
+  Serialization format:
+  {
+    "version": "1.0",
+    "name": "Project Name",
+    "objects": [
+      {
+        "name": "obj_1",
+        "meshPath": "Assets/cube.simuOPart",
+        "position": [0, 0, 0],
+        "rotation": [0, 0, 0],
+        "scale": [1, 1, 1],
+        ...
+      }
+    ]
+  }
+end note
+
+note right of MeshFile
+  Format: Wavefront OBJ (.obj)
+  Converted to .simuOPart extension
+  
+  Contains:
+  v x y z         (vertices)
+  vn x y z        (normals)
+  f v1 vn1 ...   (faces)
+  
+  Flat-shaded (no smoothing groups)
+end note
+
+note bottom of RenderObject
+  GPU-side representation
+  Used by OpenGL for rendering
+  Loaded by OpenGLViewport
+  Cached in renderObjects list
+end note
+
+@enduml
