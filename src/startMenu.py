@@ -1,3 +1,9 @@
+"""Custom startup menu for the SimuO application.
+
+This module provides the modal welcome dialog used before a new project or an
+existing project is opened.
+"""
+
 from pathlib import Path
 
 import customtkinter as ctk
@@ -6,6 +12,7 @@ from PIL import Image
 
 
 class SimuOStartMenu(ctk.CTkToplevel):
+    """Modal window that lets the user start a new scene or import an existing one."""
 
     def __init__(
         self,
@@ -17,6 +24,17 @@ class SimuOStartMenu(ctk.CTkToplevel):
         width=520,
         height=610,
     ):
+        """Create the startup dialog window.
+
+        Args:
+            parent: Parent tkinter window.
+            logo_path: Optional path to the application logo image.
+            on_new: Callback executed when the user chooses a new scene.
+            on_import: Callback executed after selecting a project file.
+            title: Window title text.
+            width: Initial window width.
+            height: Initial window height.
+        """
         super().__init__(parent)
 
         self.parent = parent
@@ -53,6 +71,11 @@ class SimuOStartMenu(ctk.CTkToplevel):
 
 
     def _build_ui(self, logo_path):
+        """Build the dialog contents, including the logo and action buttons.
+
+        Args:
+            logo_path: Optional path to the logo image file.
+        """
 
         panel = ctk.CTkFrame(
             self,
@@ -254,6 +277,11 @@ class SimuOStartMenu(ctk.CTkToplevel):
         self,
         parent
     ):
+        """Create a fallback text-based logo when no image asset is available.
+
+        Args:
+            parent: Parent widget container to attach the label to.
+        """
 
         placeholder = ctk.CTkLabel(
             parent,
@@ -280,6 +308,7 @@ class SimuOStartMenu(ctk.CTkToplevel):
 
 
     def _center_on_screen(self):
+        """Center the dialog on the active monitor."""
 
         self.update_idletasks()
 
@@ -310,6 +339,7 @@ class SimuOStartMenu(ctk.CTkToplevel):
 
 
     def _new_project(self):
+        """Handle the user selecting a new blank scene."""
 
         callback = self.on_new
 
@@ -320,6 +350,11 @@ class SimuOStartMenu(ctk.CTkToplevel):
 
 
     def _import_project(self):
+        """Open a file chooser and trigger the import callback with the selected project.
+
+        Returns:
+            None: The method exits early if the user cancels the dialog.
+        """
 
         filename = filedialog.askopenfilename(
             parent=self,
@@ -352,6 +387,7 @@ class SimuOStartMenu(ctk.CTkToplevel):
 
 
     def _close(self):
+        """Close the modal window and release any grabbed input state."""
 
         try:
             self.grab_release()
@@ -368,6 +404,17 @@ def showStartMenu(
     on_new=None,
     on_import=None,
 ):
+    """Construct and return the startup menu.
+
+    Args:
+        parent: Parent widget that owns the dialog.
+        logo_path: Optional logo image path.
+        on_new: Callback for new project creation.
+        on_import: Callback for importing a project file.
+
+    Returns:
+        SimuOStartMenu: The configured startup dialog instance.
+    """
 
     return SimuOStartMenu(
         parent=parent,
@@ -403,6 +450,7 @@ if __name__ == "__main__":
 
 
     def new_project():
+        """Preview callback for choosing a new scene."""
 
         print(
             "New .simuO build selected"
@@ -410,6 +458,11 @@ if __name__ == "__main__":
 
 
     def import_project(filepath):
+        """Preview callback for importing a project file.
+
+        Args:
+            filepath: Path of the project to import.
+        """
 
         print(
             "Imported:",
