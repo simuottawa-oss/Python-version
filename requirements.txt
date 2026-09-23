@@ -7,3 +7,4 @@ Pillow
 moderngl
 glfw
 Cython
+setuptools

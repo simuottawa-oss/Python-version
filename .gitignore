@@ -1,0 +1,28 @@
+# Virtual environments
+.venv/
+venv/
+
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Build output
+build/
+dist/
+*.egg-info/
+
+# Compiled extensions and objects
+*.so
+*.pyd
+*.o
+*.pdb
+*.exp
+
+# macOS metadata
+.DS_Store
+
+# Test/tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
