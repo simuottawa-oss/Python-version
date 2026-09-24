@@ -310,7 +310,7 @@ def loadObjFlatShaded(filename):
 
 
 class Camera:
-    """Represents the viewer's position and orientation in the 3D scene."""
+    """Represents the viewer's position and orientation in the 3D scene. Only tracks position and orientation."""
 
     def __init__(self):
         """Initialize the camera at a default viewing position.
@@ -451,58 +451,98 @@ class Camera:
             self.up,
         )
 
-class Ray:
-    """3D vectors used in RayTracer class
-    """
-
-    def __init__(self, x, y, z):
-        # Ray sample state.
-        self.x = x
-        self.y = y
-        self.z = z 
-
-
-class RayTracer:
-    """Placeholder ray-tracing engine for future physically based rendering.
-
-    This class is intentionally empty at the moment and exists as the correct
-    rendering-layer location for ray generation, intersection tests, shading,
-    and image synthesis once the ray-tracing implementation is added.
-    """
-
-    def __init__(self, scene=None, camera=None):
-        """Initialize the ray tracer.
-
-        Args:
-            scene: Optional scene data used by the tracer.
-            camera: Optional camera definition used to generate rays.
+    def mouse_ray(self, event, width, height, projection, view):
+        """Creates a ray from global mouse position and casts a ray to projected view location
+        
+        Arguments:
+            event Obj: mouse tracking
+            width integer(i think?): openGl viewport width
+            height integer
+            projection glm.mat4: projection matrix as glm.perspective data
+            view ... : camera view matrix
+        
         """
-        # Tracer context.
-        self.scene = scene
-        self.camera = camera
+    
+        """
+        projection and view matrices convert numpy.array 
+        O(1) btw
+        """
 
-    def render(self, width, height):
-        """Render a frame to a 2D image buffer.
+        #Normal device coordinates, so where the mouse is
+        x_ndc = (2.0 * event.position().x() / width) - 1.0
+        y_ndc = 1.0 - (2.0 * event.position().y() / height)
+
+
+        #floating types ftw
+        clip = np.array([x_ndc, y_ndc, -1.0, 1.0], dtype=np.float32)
+
+        inv_projection = np.linalg.inv(np.array(projection, dtype=np.float32))
+        near = inv_projection @ clip
+        near = near / near[3]
+
+        inv_view = np.linalg.inv(np.array(view, dtype=np.float32))
+        near_world = inv_view @ near
+        near_world = near_world[:3]
+
+        origin = self.position
+        direction = glm.normalize(glm.vec3(near_world) - origin)
+
+        return origin, direction
+
+class Ray:
+    """3D vectors used in RayTracer class. Position and direction are protected use getter functions u bum
+    """
+
+    def __init__(self, position, direction):
+        self._position = position
+        self._direction = direction
+ 
+
+    def RayPosition(position):
+        """Returns ray position
 
         Args:
-            width: Output image width in pixels.
-            height: Output image height in pixels.
+            position vec3: vector position
 
         Returns:
-            
+            position vec3: vector position
         """
-        "planeHeight = Camera."
+        return position
 
+    def Direction(direction):
+        """Return ray direction
 
-        for x in range(width):
-            for y in range(height):
-                localpointer = glm.vec3()
+        Args:
+            direction vec3: vector direction
 
-        
+        Returns:
+            direction vec3: vector direction
+        """
+        return direction
+
+    
+       
 
 
 class OpenGLViewport(QOpenGLWidget):
-    """Qt widget that renders the 3D scene and handles camera interaction."""
+    """Qt widget that renders the 3D scene and handles camera interaction.
+
+    Camera interaction here means the user is effectively piloting a first-person
+    camera through the scene. The camera has a position and a local basis
+    (forward/right/up) derived from yaw and pitch, and input changes that basis
+    or the camera's world position.
+
+    Keyboard movement is relative to the current camera orientation:
+    - W/S move along the camera's forward vector
+    - A/D strafe left/right along the camera's right vector
+    - Space/Ctrl move vertically along the world's up vector
+
+    Mouse interaction is used for looking around the scene. While the right mouse
+    button is held, the cursor is recentered inside the widget so the user can
+    drag continuously without the pointer leaving the viewport. Horizontal motion
+    changes yaw and vertical motion changes pitch, producing a look-around feel
+    similar to a free-fly viewer.
+    """
 
     def __init__(
         self,
@@ -903,8 +943,6 @@ class OpenGLViewport(QOpenGLWidget):
         print(
             "OpenGL viewport initialized"
         )
-        
-
     def resizeGL(
         self,
         width,
@@ -1224,7 +1262,12 @@ class OpenGLViewport(QOpenGLWidget):
         self,
         delta_time
     ):
-        """Move the camera according to the currently pressed keyboard keys.
+        """Apply keyboard-driven camera movement relative to the current view.
+
+        "Camera interaction" in this class is a free-fly camera: the user moves the
+        camera itself through the 3D scene instead of orbiting around a target. The
+        camera's current forward/right/up vectors define the local axes, so motion is
+        always relative to the direction the viewer is facing.
 
         Args:
             delta_time: Time elapsed since the previous frame.
@@ -1234,42 +1277,41 @@ class OpenGLViewport(QOpenGLWidget):
             * delta_time
         )
 
-        # Move forward while W is held.
+        # Move forward/back along the camera's viewing direction.
         if Qt.Key_W in self.keys:
             self.camera.position += (
                 self.camera.front
                 * speed
             )
 
-        # Move backward while S is held.
         if Qt.Key_S in self.keys:
             self.camera.position -= (
                 self.camera.front
                 * speed
             )
 
-        # Strafe right while D is held.
+        # Side-step relative to the camera's local right axis.
         if Qt.Key_D in self.keys:
             self.camera.position += (
                 self.camera.right
                 * speed
             )
 
-        # Strafe left while A is held.
         if Qt.Key_A in self.keys:
             self.camera.position -= (
                 self.camera.right
                 * speed
             )
 
-        # Move upward while Space is held.
+        # Vertical movement is independent of the viewing direction and tracks the
+        # scene's world-up axis, which makes it easier to inspect the model from
+        # above or below while still looking around.
         if Qt.Key_Space in self.keys:
             self.camera.position += (
                 self.camera.world_up
                 * speed
             )
 
-        # Move downward while Control is held.
         if Qt.Key_Control in self.keys:
             self.camera.position -= (
                 self.camera.world_up
@@ -1311,25 +1353,63 @@ class OpenGLViewport(QOpenGLWidget):
         )
 
     def mousePressEvent(self, event):
-        """Begin mouse-based camera rotation when the right mouse button is pressed.
+        """Start look-around camera control while the right mouse button is held.
+
+        The user is not orbiting around an object; they are turning the camera as if
+        they are looking around from inside the scene. Pressing the right mouse button
+        locks the cursor to the viewport and forces the pointer back to the center on
+        each movement step so continuous dragging feels smooth and stable.
 
         Args:
             event: Qt mouse event.
         """
-        if event.button() == Qt.RightButton:
-            # Track the drag state for camera rotation.
+        if event.button() == Qt.LeftButton:
+            x = event.position().x()
+            y = event.position().y()
+
+            width = max(1, self.width())
+            height = max(1, self.height())
+
+            projection = glm.perspective(
+                glm.radians(60.0),
+                width / height,
+                0.1,
+                1000.0,
+            )
+
+            view = self.camera.view_matrix()
+
+            origin, direction = self.camera.mouse_ray(
+                event,
+                width,
+                height,
+                projection,
+                view
+            )
+
+            # RenderRay is paused for now. Keep the ray-generation logic active,
+            # but do not draw the debug line while the feature is under pause.
+            # OpenGLViewport.RenderRay(origin, direction, 100)
+
+            print("click ray:", origin, direction)
+            # later: intersect against scene objects here
+
+        elif event.button() == Qt.RightButton:
             self.right_mouse_down = True
-
             self.setCursor(Qt.BlankCursor)
-
             self.grabMouse()
             self.setFocus()
-
-            # Ignore the synthetic move event caused by recentering.
             self.ignore_center_event = True
             self.center_mouse()
+            
+
+
+
     def mouseReleaseEvent(self, event):
-        """End mouse-based camera control when the right mouse button is released.
+        """Stop camera look-around control when the right mouse button is released.
+
+        Releasing the button returns cursor control to the desktop and ends the
+        persistent drag state used for camera yaw/pitch updates.
 
         Args:
             event: Qt mouse event.
@@ -1345,7 +1425,13 @@ class OpenGLViewport(QOpenGLWidget):
             self.unsetCursor()
             
     def mouseMoveEvent(self, event):
-        """Rotate the camera based on cursor movement while dragging.
+        """Rotate the camera based on drag movement while in look mode.
+
+        Camera interaction here is implemented as a "look around" controller. The
+        cursor delta is translated into yaw and pitch changes on the Camera object,
+        so dragging left/right turns the view horizontally and dragging up/down tilts
+        the view vertically. A recenter step keeps the pointer from reaching the edge
+        of the widget, which would otherwise break the drag experience.
 
         Args:
             event: Qt mouse move event.
@@ -1402,4 +1488,19 @@ class OpenGLViewport(QOpenGLWidget):
         QCursor.setPos(
             global_center
         )
-        
+
+
+    def RenderRay(self, position, direction, length=100.0):
+        """Paused for now: debug ray rendering is temporarily disabled.
+
+        This function is intentionally left inactive so the rest of the viewport
+        camera and input pipeline can continue running without the ray debug path
+        interfering with the app.
+        """
+        # Paused: render-debug ray drawing is temporarily disabled.
+        # end = position + direction * length
+        # glBegin(GL_LINES)
+        # glVertex3f(position.x, position.y, position.z)
+        # glVertex3f(end.x, end.y, end.z)
+        # glEnd()
+        return None
