@@ -489,36 +489,6 @@ class Camera:
 
         return origin, direction
 
-class Ray:
-    """3D vectors used in RayTracer class. Position and direction are protected use getter functions u bum
-    """
-
-    def __init__(self, position, direction):
-        self._position = position
-        self._direction = direction
- 
-
-    def RayPosition(position):
-        """Returns ray position
-
-        Args:
-            position vec3: vector position
-
-        Returns:
-            position vec3: vector position
-        """
-        return position
-
-    def Direction(direction):
-        """Return ray direction
-
-        Args:
-            direction vec3: vector direction
-
-        Returns:
-            direction vec3: vector direction
-        """
-        return direction
 
     
        
