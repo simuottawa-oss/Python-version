@@ -1,4 +1,5 @@
-PySide6
+# 6.11 includes Shiboken/PySide lifecycle fixes needed by the Qt menu actions.
+PySide6==6.11.2
 PyOpenGL
 PyGLM
 numpy
