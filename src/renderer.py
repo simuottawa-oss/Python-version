@@ -652,16 +652,16 @@ class OpenGLViewport(QOpenGLWidget):
         meshPath = Path(
             object.meshPath
         )
-        self.makeCurrent()
         
         if not meshPath.exists():
-            self.doneCurrent()
             raise FileNotFoundError(
 
                 f"Could not find OBJ at {meshPath}"
             )
 
-
+        # Parsing a large mesh can take several seconds. Do it before making
+        # the OpenGL context current so Qt can safely finish closing native
+        # dialogs on macOS.
         vertexData = loadObjFlatShaded(meshPath)
 
         vertexCount = (
@@ -671,6 +671,8 @@ class OpenGLViewport(QOpenGLWidget):
         print(
             f"Loaded {vertexCount:,} vertices for {object.name}"
         )
+
+        self.makeCurrent()
 
         vao = glGenVertexArrays(1)
 
@@ -728,10 +730,10 @@ class OpenGLViewport(QOpenGLWidget):
             "vbo": vbo,
             "vertexCount": vertexCount
         })
-        
+
         self.doneCurrent()
-        self.update()   
-   
+        self.update()
+
     def initializeGL(self):
         """Initialize OpenGL state, shaders, and scene buffers.
 
@@ -770,6 +772,10 @@ class OpenGLViewport(QOpenGLWidget):
                 FRAGMENT_SHADER,
                 GL_FRAGMENT_SHADER
             ),
+            # macOS core profile rejects program validation until a VAO is
+            # bound. Linking still checks the shader interface here; the
+            # program is used after the mesh VAOs are created below.
+            validate=False,
         )
         
         # Compile and cache the axis helper shader.
@@ -782,6 +788,7 @@ class OpenGLViewport(QOpenGLWidget):
                 AXIS_FRAGMENT_SHADER,
                 GL_FRAGMENT_SHADER
             ),
+            validate=False,
         )
 
         self.debugRayShader = compileProgram(
@@ -793,6 +800,7 @@ class OpenGLViewport(QOpenGLWidget):
                 DEBUG_RAY_FRAGMENT_SHADER,
                 GL_FRAGMENT_SHADER
             ),
+            validate=False,
         )
 
         # Cache the main shader uniform locations.
