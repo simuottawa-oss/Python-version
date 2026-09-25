@@ -645,52 +645,52 @@ class SimuOMainWindow(QMainWindow):
 
     def createMenus(self):
 
-        fileMenu = self.menuBar().addMenu("File")
+        self.fileMenu = self.menuBar().addMenu("File")
 
-        self.menuBar().addMenu("Edit")
+        self.editMenu = self.menuBar().addMenu("Edit")
 
-        self.menuBar().addMenu("Window")
+        self.windowMenu = self.menuBar().addMenu("Window")
 
-        self.menuBar().addMenu("Help")
+        self.helpMenu = self.menuBar().addMenu("Help")
 
-        newAction = QAction("New", self)
+        self.newAction = QAction("New", self)
 
-        openAction = QAction("Open", self)
+        self.openAction = QAction("Open", self)
 
-        importAction = QAction("Import", self)
+        self.importAction = QAction("Import", self)
 
-        saveAsAction = QAction("SaveAs", self)
-        saveAction = QAction("Save", self)
-        saveAction.setShortcut("Ctrl+S")
+        self.saveAsAction = QAction("SaveAs", self)
+        self.saveAction = QAction("Save", self)
+        self.saveAction.setShortcut("Ctrl+S")
 
-        saveAsAction.setShortcut("Ctrl+Shift+S")
+        self.saveAsAction.setShortcut("Ctrl+Shift+S")
 
-        exitAction = QAction("Exit", self)
+        self.exitAction = QAction("Exit", self)
         
-        newAction.triggered.connect(self.newProject)
+        self.newAction.triggered.connect(self.newProject)
 
-        openAction.triggered.connect(self.openFile)
+        self.openAction.triggered.connect(self.openFile)
 
-        importAction.triggered.connect(self.importFile)
+        self.importAction.triggered.connect(self.importFile)
 
-        exitAction.triggered.connect(self.close)
+        self.exitAction.triggered.connect(self.close)
 
-        saveAction.triggered.connect(self.saveFile)
+        self.saveAction.triggered.connect(self.saveFile)
 
-        saveAsAction.triggered.connect(self.saveAsFile)
+        self.saveAsAction.triggered.connect(self.saveAsFile)
 
-        fileMenu.addAction(newAction)
+        self.fileMenu.addAction(self.newAction)
 
-        fileMenu.addAction(openAction)
+        self.fileMenu.addAction(self.openAction)
 
-        fileMenu.addAction(importAction)
+        self.fileMenu.addAction(self.importAction)
 
-        fileMenu.addAction(saveAsAction)
-        fileMenu.addAction(saveAction)
+        self.fileMenu.addAction(self.saveAsAction)
+        self.fileMenu.addAction(self.saveAction)
 
-        fileMenu.addSeparator()
+        self.fileMenu.addSeparator()
 
-        fileMenu.addAction(exitAction)
+        self.fileMenu.addAction(self.exitAction)
 
     # ---------------------------------------------------------
     # LEFT TOOLBAR
