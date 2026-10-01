@@ -12,6 +12,8 @@ import ctypes
 import glm
 import numpy as np
 
+from ray import Ray
+
 from OpenGL.GL import *
 from OpenGL.GL.shaders import compileProgram, compileShader
 
@@ -50,6 +52,31 @@ void main()
         0.8,
         1.0
     );
+}
+"""
+
+DEBUG_RAY_VERTEX_SHADER = """
+#version 330 core
+
+layout (location = 0) in vec3 in_position;
+
+uniform mat4 view;
+uniform mat4 projection;
+
+void main()
+{
+    gl_Position = projection * view * vec4(in_position, 1.0);
+}
+"""
+
+DEBUG_RAY_FRAGMENT_SHADER = """
+#version 330 core
+
+out vec4 frag_color;
+
+void main()
+{
+    frag_color = vec4(1.0, 0.15, 0.15, 1.0);
 }
 """
 
@@ -488,12 +515,6 @@ class Camera:
         direction = glm.normalize(glm.vec3(near_world) - origin)
 
         return origin, direction
-
-
-    
-       
-
-
 class OpenGLViewport(QOpenGLWidget):
     """Qt widget that renders the 3D scene and handles camera interaction.
 
@@ -522,6 +543,7 @@ class OpenGLViewport(QOpenGLWidget):
     ):
         # OpenGL axis helper state.
         self.axisShader = None
+        self.debugRayShader = None
         self.axisVAO = None
         self.axisVBO = None
         self.axisVertexCount = 0
@@ -554,6 +576,9 @@ class OpenGLViewport(QOpenGLWidget):
         # Main scene shader and generated render-object cache.
         self.shader = None
         self.renderObjects = []
+        self.debug_ray = None
+        self.debug_ray_vao = None
+        self.debug_ray_vbo = None
 
         # Cached uniform locations for the main shader.
         self.model_location = None
@@ -583,7 +608,6 @@ class OpenGLViewport(QOpenGLWidget):
     # ---------------------------------------------------------
     # OPENGL SETUP
     # ---------------------------------------------------------
-
             
     def clearRenderObjects(self):
         """Delete all OpenGL vertex buffers and arrays belonging to scene objects."""
@@ -616,6 +640,7 @@ class OpenGLViewport(QOpenGLWidget):
         self.update()
         
     def addNewObject(self, object):
+
         """Load a SceneObject mesh into GPU memory and add it to the viewport.
 
         Args:
@@ -706,6 +731,7 @@ class OpenGLViewport(QOpenGLWidget):
         
         self.doneCurrent()
         self.update()   
+   
     def initializeGL(self):
         """Initialize OpenGL state, shaders, and scene buffers.
 
@@ -754,6 +780,17 @@ class OpenGLViewport(QOpenGLWidget):
             ),
             compileShader(
                 AXIS_FRAGMENT_SHADER,
+                GL_FRAGMENT_SHADER
+            ),
+        )
+
+        self.debugRayShader = compileProgram(
+            compileShader(
+                DEBUG_RAY_VERTEX_SHADER,
+                GL_VERTEX_SHADER
+            ),
+            compileShader(
+                DEBUG_RAY_FRAGMENT_SHADER,
                 GL_FRAGMENT_SHADER
             ),
         )
@@ -831,6 +868,10 @@ class OpenGLViewport(QOpenGLWidget):
         glBindVertexArray(
             0
         )
+
+        if self.debug_ray_vao is None:
+            self.debug_ray_vao = glGenVertexArrays(1)
+            self.debug_ray_vbo = glGenBuffers(1)
 
         if self.scene is not None:
             for sceneObject in self.scene.objects:
@@ -913,6 +954,7 @@ class OpenGLViewport(QOpenGLWidget):
         print(
             "OpenGL viewport initialized"
         )
+    
     def resizeGL(
         self,
         width,
@@ -1092,6 +1134,24 @@ class OpenGLViewport(QOpenGLWidget):
         glBindVertexArray(
             0
         )
+
+        if self.debug_ray is not None:
+            glUseProgram(self.debugRayShader)
+
+            debugViewLocation = glGetUniformLocation(self.debugRayShader, "view")
+            debugProjectionLocation = glGetUniformLocation(self.debugRayShader, "projection")
+
+            glUniformMatrix4fv(debugViewLocation, 1, GL_FALSE, glm.value_ptr(view))
+            glUniformMatrix4fv(debugProjectionLocation, 1, GL_FALSE, glm.value_ptr(projection))
+
+            glBindVertexArray(self.debug_ray_vao)
+            glBindBuffer(GL_ARRAY_BUFFER, self.debug_ray_vbo)
+            glBufferData(GL_ARRAY_BUFFER, self.debug_ray.nbytes, self.debug_ray, GL_DYNAMIC_DRAW)
+            glEnableVertexAttribArray(0)
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * self.debug_ray.itemsize, ctypes.c_void_p(0))
+            glDrawArrays(GL_LINES, 0, 2)
+            glBindVertexArray(0)
+            glUseProgram(0)
 
         # ---------------------------------------------------------
         # DRAW SCENE OBJECTS
@@ -1357,9 +1417,7 @@ class OpenGLViewport(QOpenGLWidget):
                 view
             )
 
-            # RenderRay is paused for now. Keep the ray-generation logic active,
-            # but do not draw the debug line while the feature is under pause.
-            # OpenGLViewport.RenderRay(origin, direction, 100)
+            self.RenderRay(origin, direction, 100.0)
 
             print("click ray:", origin, direction)
             # later: intersect against scene objects here
@@ -1372,9 +1430,6 @@ class OpenGLViewport(QOpenGLWidget):
             self.ignore_center_event = True
             self.center_mouse()
             
-
-
-
     def mouseReleaseEvent(self, event):
         """Stop camera look-around control when the right mouse button is released.
 
@@ -1459,18 +1514,11 @@ class OpenGLViewport(QOpenGLWidget):
             global_center
         )
 
-
     def RenderRay(self, position, direction, length=100.0):
-        """Paused for now: debug ray rendering is temporarily disabled.
+        """Queue a debug ray from origin to direction * length for the next paint."""
+        ray = Ray(position, direction)
+        self.debug_ray = ray.render(length)
+        self.update()
+        return ray
 
-        This function is intentionally left inactive so the rest of the viewport
-        camera and input pipeline can continue running without the ray debug path
-        interfering with the app.
-        """
-        # Paused: render-debug ray drawing is temporarily disabled.
-        # end = position + direction * length
-        # glBegin(GL_LINES)
-        # glVertex3f(position.x, position.y, position.z)
-        # glVertex3f(end.x, end.y, end.z)
-        # glEnd()
-        return None
+   

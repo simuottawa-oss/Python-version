@@ -4,8 +4,15 @@ This module decides whether the user starts a new scene or imports an existing
 one, then launches the main window.
 """
 
-import customtkinter as ctk
+import sys
 from pathlib import Path
+
+if __package__ in (None, ""):
+    src_dir = str(Path(__file__).resolve().parent)
+    if src_dir not in sys.path:
+        sys.path.insert(0, src_dir)
+
+import customtkinter as ctk
 
 from startMenu import showStartMenu
 from simuO import App
