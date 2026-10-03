@@ -39,4 +39,8 @@ class Ray:
             ],
             dtype=np.float32,
         )
+    
+    def checkCollisions(self, ):
+        """Checks collision with literally anything. ONLY CALL DURING LEFT MOUSE CLICK EVENTS"""
+        pass
 
