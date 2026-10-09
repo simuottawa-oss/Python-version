@@ -4,7 +4,3 @@ PyGLM
 numpy
 customtkinter
 Pillow
-moderngl
-glfw
-Cython
-setuptools
