@@ -1,3 +1,9 @@
+"""Main application window and editor logic for SimuO.
+
+This module assembles the Qt interface, manages project loading/saving, and
+provides scene-editing dialogs for object positioning and rotation.
+"""
+
 import sys
 from pathlib import Path
 import json
@@ -24,7 +30,15 @@ from renderer import OpenGLViewport
 
 
 class SimuOMainWindow(QMainWindow):
+    """Primary editor window for the SimuO scene editor."""
+
     def __init__(self, projectPath=None, scene=None):
+        """Create the main application window and initialize the scene editor.
+
+        Args:
+            projectPath: Optional path to a saved .simuO project.
+            scene: Optional pre-existing scene object.
+        """
         super().__init__()
 
         self.projectPath = projectPath
@@ -151,6 +165,11 @@ class SimuOMainWindow(QMainWindow):
     # ---------------------------------------------------------
 
     def newProject(self):
+        """Create a new empty project after prompting to save the current one.
+
+        Returns:
+            None: The method updates the current scene and viewport state.
+        """
 
         if self.scene.sceneHasObjects():
             response = QMessageBox.question(
@@ -191,6 +210,15 @@ class SimuOMainWindow(QMainWindow):
         path,
         uploadToGPU=True
     ):
+        """Load a saved .simuO project from disk.
+
+        Args:
+            path: File path to the project JSON.
+            uploadToGPU: If True, also upload meshes to the OpenGL viewport.
+
+        Returns:
+            None: The scene is rebuilt from the file contents.
+        """
         with open(
             path,
             "r",
@@ -274,6 +302,7 @@ class SimuOMainWindow(QMainWindow):
             path
         )
     def openFile(self):
+        """Open a project via a file dialog and load it into the editor."""
         filePath, _ = QFileDialog.getOpenFileName(
             self,
             "Open SimuO Project",
@@ -289,6 +318,7 @@ class SimuOMainWindow(QMainWindow):
         self.loadFile(path, True)
 
     def importFile(self):
+        """Import an external 3D model into the current scene."""
         filePath, _ = QFileDialog.getOpenFileName(
             self,
             "Import File",
@@ -310,6 +340,11 @@ class SimuOMainWindow(QMainWindow):
         self.viewport.addNewObject(importedObject)
 
     def saveFile(self):
+        """Save the current scene to the active project file.
+
+        Returns:
+            None: Writes the scene data to disk in JSON format.
+        """
         if self.projectPath is None:
             filePath, _ = QFileDialog.getSaveFileName(
                 self, "Save SimuO Project", "", "SimuO Project Files (*.simuO)"
@@ -350,6 +385,7 @@ class SimuOMainWindow(QMainWindow):
         print("Saved project:", self.projectPath)
 
     def saveAsFile(self):
+        """Save the current project under a new file path."""
         filePath, _ = QFileDialog.getSaveFileName(
             self, "Save Scene as", "", "SimuO Project Files (*.simuO)"
         )
@@ -370,6 +406,7 @@ class SimuOMainWindow(QMainWindow):
     # SET ROTATION TOOL
     # ---------------------------------------------------------
     def openSetRotationObjectList(self):
+        """Open a dialog that lets the user select an object for rotation editing."""
         dialog = QDialog(self)
 
         dialog.setWindowTitle("Set Rotation")
@@ -416,6 +453,11 @@ class SimuOMainWindow(QMainWindow):
         dialog.exec()
 
     def openSetRotationDialog(self, sceneObject):
+        """Display a rotation editor for a specific scene object.
+
+        Args:
+            sceneObject: The object whose rotation will be modified.
+        """
         dialog = QDialog(self)
 
         dialog.setWindowTitle(f"Reposition - {sceneObject.name}")
@@ -508,6 +550,7 @@ class SimuOMainWindow(QMainWindow):
     # ---------------------------------------------------------
 
     def openRepositionObjectList(self):
+        """Open a selector for choosing which object to reposition."""
         dialog = QDialog(self)
 
         dialog.setWindowTitle("Reposition Object")
@@ -554,6 +597,11 @@ class SimuOMainWindow(QMainWindow):
         dialog.exec()
 
     def openPositionDialog(self, sceneObject):
+        """Display a position editor for a specific scene object.
+
+        Args:
+            sceneObject: The object whose position will be edited.
+        """
         dialog = QDialog(self)
 
         dialog.setWindowTitle(f"Reposition - {sceneObject.name}")
@@ -644,6 +692,7 @@ class SimuOMainWindow(QMainWindow):
     # ---------------------------------------------------------
 
     def createMenus(self):
+        """Construct the main application menu bar and menu actions."""
 
         fileMenu = self.menuBar().addMenu("File")
 
@@ -697,6 +746,7 @@ class SimuOMainWindow(QMainWindow):
     # ---------------------------------------------------------
 
     def createToolbar(self):
+        """Create the left-side tool bar with editing actions."""
 
         toolbar = QToolBar("Tools", self)
 
@@ -732,6 +782,11 @@ class SimuOMainWindow(QMainWindow):
                 action.setChecked(True)
 
     def toolSelected(self, name):
+        """Handle a toolbar tool selection.
+
+        Args:
+            name: Name of the selected tool.
+        """
 
         sender = self.sender()
 
@@ -748,7 +803,15 @@ class SimuOMainWindow(QMainWindow):
 
 
 class App:
+    """Top-level application launcher for SimuO."""
+
     def __init__(self, projectPath=None, scene=None):
+        """Initialize the application shell.
+
+        Args:
+            projectPath: Optional path to a saved project.
+            scene: Optional scene to attach to the app.
+        """
 
         self.projectPath = projectPath
 
@@ -760,6 +823,11 @@ class App:
             self.scene = Scene()
 
     def run(self):
+        """Start the application and show the main editor window.
+
+        Returns:
+            int: The return code from the Qt application event loop, if any.
+        """
 
         # Must be configured before QApplication is created.
         surfaceFormat = QSurfaceFormat()

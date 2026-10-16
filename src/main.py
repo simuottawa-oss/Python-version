@@ -1,11 +1,30 @@
-import customtkinter as ctk
+"""Entry point for the SimuO application.
+
+This module decides whether the user starts a new scene or imports an existing
+one, then launches the main window.
+"""
+
+import sys
 from pathlib import Path
+
+if __package__ in (None, ""):
+    src_dir = str(Path(__file__).resolve().parent)
+    if src_dir not in sys.path:
+        sys.path.insert(0, src_dir)
+
+import customtkinter as ctk
 
 from startMenu import showStartMenu
 from simuO import App
 
 
 def startup_menu():
+    """Show the startup menu and return the user's next action.
+
+    Returns:
+        tuple[str | None, str | None]: A (action, filepath) pair. The action is
+        "new" or "import"; filepath is only filled for imports.
+    """
     root = ctk.CTk()
 
     # Hide the empty main CTk window.
@@ -49,6 +68,12 @@ def startup_menu():
 
 
 def main():
+    """Launch the SimuO app according to the startup selection.
+
+    Returns:
+        None: The function starts the Qt application and returns when the event
+        loop is running.
+    """
     action, filepath = startup_menu()
 
     if action is None:
