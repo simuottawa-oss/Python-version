@@ -1417,10 +1417,13 @@ class OpenGLViewport(QOpenGLWidget):
                 view
             )
 
-            self.RenderRay(origin, direction, 100.0)
+            ray = self.RenderRay(origin, direction, 100.0)
 
             print("click ray:", origin, direction)
-            # later: intersect against scene objects here
+            objects = self.scene.objects if self.scene is not None else []
+            hit = ray.checkCollisions(obj for obj in objects if obj.name != "Axis")
+            if hit is not None:
+                print("Ray hit:", hit["object"].name, "at", hit["point"])
 
         elif event.button() == Qt.RightButton:
             self.right_mouse_down = True
@@ -1520,5 +1523,3 @@ class OpenGLViewport(QOpenGLWidget):
         self.debug_ray = ray.render(length)
         self.update()
         return ray
-
-   
