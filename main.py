@@ -1,7 +1,7 @@
 """Compatibility launcher for the SimuO application.
 
-This repository contains both a legacy demo and the active Qt editor. Running the
-repository root script should delegate to the actual app entrypoint under src/.
+Running the repository root script delegates to the Qt editor entrypoint under
+src/.
 """
 
 import importlib.util
