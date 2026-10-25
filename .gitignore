@@ -17,6 +17,7 @@ dist/
 *.o
 *.pdb
 *.exp
+*.lib
 
 # macOS metadata
 .DS_Store
@@ -26,3 +27,6 @@ dist/
 .mypy_cache/
 .ruff_cache/
 .coverage
+
+# Local editor configuration
+.vscode/

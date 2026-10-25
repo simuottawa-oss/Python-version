@@ -1,58 +1,54 @@
-# Python 3D Renderer
+# SimuO OpenGL Renderer
 
 ## Setup
 
+Create and activate a virtual environment, then install the dependencies:
+
 ### Windows
 
-Install the Python dependencies:
-
-```bash
+```powershell
+py -m venv .venv
+.venv\Scripts\Activate.ps1
 py -m pip install -r requirements.txt
 ```
 
-### macOS
+### macOS and Linux
 
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate
 python3 -m pip install -r requirements.txt
 ```
-
-## Build
-
-### Windows
-
-```bash
-py setup.py build_ext --inplace
-```
-
-### macOS
-
-```bash
-python3 setup.py build_ext --inplace
-```
-
-The source file `cppCalculations.pyx` is cross-platform, but the compiled extension is platform-specific. Windows builds a `.pyd` file, while macOS builds a `.so` file. Run the build command on each computer before running the program, and run it again any time you edit `cppCalculations.pyx`.
-
-Windows also needs a C++ compiler installed. If the build fails with a compiler error, install Microsoft C++ Build Tools, then try the build command again.
 
 ## Run
 
 ### Windows
 
-```bash
+```powershell
 py main.py
 ```
 
-### macOS
+### macOS and Linux
 
 ```bash
 python3 main.py
 ```
 
+Run these commands from the repository root. You can also launch the app directly
+with `python src/main.py`. The app does not require a Cython or C++ build step.
+
+## Project layout
+
+- `main.py`: convenience launcher.
+- `src/`: application, startup menu, scene, ray casting, and OpenGL renderer.
+- `Assets/`: sample meshes in `.simuOPart` format.
+- `Images/`: application images.
+- `requirements.txt`: Python runtime dependencies.
+
 ## Controls
 
-- `W` moves the camera forward
-- `S` moves the camera backward
-- `A` moves the camera left
-- `D` moves the camera right
-- `Left Arrow` rotates the camera left
-- `Right Arrow` rotates the camera right
+- `W`, `A`, `S`, and `D` move the camera relative to its viewing direction.
+- `Space` moves the camera up.
+- `Control` moves the camera down.
+- Hold the right mouse button and move the mouse to look around.
+- `Escape` closes the application.
