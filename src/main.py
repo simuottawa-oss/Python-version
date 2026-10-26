@@ -1,7 +1,5 @@
 """Entry point for the SimuO application."""
 
-import os
-import stat
 import sys
 from pathlib import Path
 
@@ -11,7 +9,6 @@ if __package__ in (None, ""):
         sys.path.insert(0, src_dir)
 
 from PySide6.QtCore import Qt
-from PySide6.QtCore import QLibraryInfo
 from PySide6.QtGui import QPixmap, QSurfaceFormat
 from PySide6.QtWidgets import (
     QApplication,
@@ -113,22 +110,6 @@ class StartupDialog(QDialog):
 
 
 def configure_opengl():
-    # Desktop/iCloud can mark downloaded dylibs as hidden. Qt ignores hidden
-    # files while scanning its plugin directories, including libqcocoa.dylib.
-    cocoa_plugin = (
-        Path(QLibraryInfo.path(QLibraryInfo.PluginsPath))
-        / "platforms"
-        / "libqcocoa.dylib"
-    )
-    if (
-        sys.platform == "darwin"
-        and hasattr(os, "chflags")
-        and cocoa_plugin.exists()
-    ):
-        flags = cocoa_plugin.stat().st_flags
-        if flags & stat.UF_HIDDEN:
-            os.chflags(cocoa_plugin, flags & ~stat.UF_HIDDEN)
-
     # The format must be selected before QApplication creates any windows.
     surface_format = QSurfaceFormat()
     surface_format.setVersion(3, 3)

@@ -23,6 +23,6 @@ def _load_src_main():
 
 
 if __name__ == "__main__":
-    _load_src_main().main()
+    raise SystemExit(_load_src_main().main())
 
 

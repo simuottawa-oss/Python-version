@@ -659,9 +659,8 @@ class OpenGLViewport(QOpenGLWidget):
                 f"Could not find OBJ at {meshPath}"
             )
 
-        # Parsing a large mesh can take several seconds. Do it before making
-        # the OpenGL context current so Qt can safely finish closing native
-        # dialogs on macOS.
+        # File parsing does not need an OpenGL context. Acquire it only when
+        # uploading the mesh; parsing still runs on the GUI thread.
         vertexData = loadObjFlatShaded(meshPath)
 
         vertexCount = (
@@ -772,9 +771,9 @@ class OpenGLViewport(QOpenGLWidget):
                 FRAGMENT_SHADER,
                 GL_FRAGMENT_SHADER
             ),
-            # macOS core profile rejects program validation until a VAO is
-            # bound. Linking still checks the shader interface here; the
-            # program is used after the mesh VAOs are created below.
+            # Validation checks the current drawing state. Qt's framebuffer
+            # and our VAOs are not ready here, so macOS rejects validation.
+            # Shader compilation and program linking are still checked.
             validate=False,
         )
         
@@ -1528,5 +1527,3 @@ class OpenGLViewport(QOpenGLWidget):
         self.debug_ray = ray.render(length)
         self.update()
         return ray
-
-   
