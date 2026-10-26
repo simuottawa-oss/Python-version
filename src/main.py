@@ -1,8 +1,4 @@
-"""Entry point for the SimuO application.
-
-This module decides whether the user starts a new scene or imports an existing
-one, then launches the main window.
-"""
+"""Entry point for the SimuO application."""
 
 import sys
 from pathlib import Path
@@ -12,84 +8,134 @@ if __package__ in (None, ""):
     if src_dir not in sys.path:
         sys.path.insert(0, src_dir)
 
-import customtkinter as ctk
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QPixmap, QSurfaceFormat
+from PySide6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QFileDialog,
+    QLabel,
+    QPushButton,
+    QVBoxLayout,
+)
 
-from startMenu import showStartMenu
-from simuO import App
+from simuO import SimuOMainWindow
 
 
-def startup_menu():
-    """Show the startup menu and return the user's next action.
+class StartupDialog(QDialog):
+    """Qt startup dialog, kept in the same event loop as the OpenGL window."""
 
-    Returns:
-        tuple[str | None, str | None]: A (action, filepath) pair. The action is
-        "new" or "import"; filepath is only filled for imports.
-    """
-    root = ctk.CTk()
+    def __init__(self):
+        super().__init__()
 
-    # Hide the empty main CTk window.
-    # We only want the startup menu visible.
-    root.withdraw()
+        self.action = None
+        self.filepath = None
 
-    startup = {
-        "action": None,
-        "filepath": None
-    }
+        self.setWindowTitle("SimuO")
+        self.setFixedSize(520, 610)
+        self.setStyleSheet(
+            """
+            QDialog { background-color: #1f1f1f; }
+            QLabel { color: #f2f2f2; }
+            QPushButton {
+                color: #f5f5f5;
+                background-color: #3f3f3f;
+                border: 1px solid #5a5a5a;
+                border-radius: 6px;
+                padding: 10px;
+                font-size: 13px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #525252; }
+            """
+        )
 
-    def new_project():
-        startup["action"] = "new"
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(48, 36, 48, 42)
+        layout.setSpacing(12)
 
-    def import_project(filepath):
-        startup["action"] = "import"
-        startup["filepath"] = filepath
+        logo = QLabel()
+        logo.setAlignment(Qt.AlignCenter)
+        logo_path = (
+            Path(__file__).resolve().parent.parent
+            / "Images"
+            / "simuo_logo.png"
+        )
+        pixmap = QPixmap(str(logo_path))
+        if not pixmap.isNull():
+            logo.setPixmap(
+                pixmap.scaled(
+                    390,
+                    270,
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation,
+                )
+            )
+        layout.addWidget(logo, 1)
 
-    logo_path = (
-        Path(__file__).resolve().parent.parent
-        / "Images"
-        / "simuo_logo.png"
-    )
+        title = QLabel("SimuO")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("font-size: 24px; font-weight: bold;")
+        layout.addWidget(title)
 
-    menu = showStartMenu(
-        parent=root,
-        logo_path=logo_path,
-        on_new=new_project,
-        on_import=import_project,
-    )
+        subtitle = QLabel("3D Physics Simulator")
+        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setStyleSheet("color: #9c9c9c; font-size: 12px;")
+        layout.addWidget(subtitle)
+        layout.addSpacing(18)
 
-    # Wait until the startup menu closes.
-    root.wait_window(menu)
+        new_button = QPushButton("New Scene")
+        new_button.clicked.connect(self.new_project)
+        layout.addWidget(new_button)
 
-    root.destroy()
+        import_button = QPushButton("Import Scene")
+        import_button.clicked.connect(self.import_project)
+        layout.addWidget(import_button)
 
-    return (
-        startup["action"],
-        startup["filepath"]
-    )
+    def new_project(self):
+        self.action = "new"
+        self.accept()
+
+    def import_project(self):
+        filepath, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import SimuO Project",
+            "",
+            "SimuO Projects (*.simuO);;All Files (*)",
+        )
+        if filepath:
+            self.action = "import"
+            self.filepath = filepath
+            self.accept()
+
+
+def configure_opengl():
+    # The format must be selected before QApplication creates any windows.
+    surface_format = QSurfaceFormat()
+    surface_format.setVersion(3, 3)
+    surface_format.setProfile(QSurfaceFormat.CoreProfile)
+    surface_format.setDepthBufferSize(24)
+    QSurfaceFormat.setDefaultFormat(surface_format)
 
 
 def main():
-    """Launch the SimuO app according to the startup selection.
+    configure_opengl()
+    application = QApplication(sys.argv)
 
-    Returns:
-        None: The function starts the Qt application and returns when the event
-        loop is running.
-    """
-    action, filepath = startup_menu()
+    startup = StartupDialog()
+    if startup.exec() != QDialog.Accepted:
+        return 0
 
-    if action is None:
-        return
-
-    if action == "new":
+    if startup.action == "new":
         print("Creating new SimuO build")
+        window = SimuOMainWindow()
+    else:
+        print("Opening project:", startup.filepath)
+        window = SimuOMainWindow(projectPath=startup.filepath)
 
-        app = App()
-
-    elif action == "import":
-        print("Opening project:", filepath)
-
-        app = App(projectPath=filepath)
-    app.run()
+    window.show()
+    return application.exec()
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

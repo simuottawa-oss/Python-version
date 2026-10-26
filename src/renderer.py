@@ -652,16 +652,15 @@ class OpenGLViewport(QOpenGLWidget):
         meshPath = Path(
             object.meshPath
         )
-        self.makeCurrent()
         
         if not meshPath.exists():
-            self.doneCurrent()
             raise FileNotFoundError(
 
                 f"Could not find OBJ at {meshPath}"
             )
 
-
+        # File parsing does not need an OpenGL context. Acquire it only when
+        # uploading the mesh; parsing still runs on the GUI thread.
         vertexData = loadObjFlatShaded(meshPath)
 
         vertexCount = (
@@ -671,6 +670,8 @@ class OpenGLViewport(QOpenGLWidget):
         print(
             f"Loaded {vertexCount:,} vertices for {object.name}"
         )
+
+        self.makeCurrent()
 
         vao = glGenVertexArrays(1)
 
@@ -728,10 +729,10 @@ class OpenGLViewport(QOpenGLWidget):
             "vbo": vbo,
             "vertexCount": vertexCount
         })
-        
+
         self.doneCurrent()
-        self.update()   
-   
+        self.update()
+
     def initializeGL(self):
         """Initialize OpenGL state, shaders, and scene buffers.
 
@@ -770,6 +771,10 @@ class OpenGLViewport(QOpenGLWidget):
                 FRAGMENT_SHADER,
                 GL_FRAGMENT_SHADER
             ),
+            # Validation checks the current drawing state. Qt's framebuffer
+            # and our VAOs are not ready here, so macOS rejects validation.
+            # Shader compilation and program linking are still checked.
+            validate=False,
         )
         
         # Compile and cache the axis helper shader.
@@ -782,6 +787,7 @@ class OpenGLViewport(QOpenGLWidget):
                 AXIS_FRAGMENT_SHADER,
                 GL_FRAGMENT_SHADER
             ),
+            validate=False,
         )
 
         self.debugRayShader = compileProgram(
@@ -793,6 +799,7 @@ class OpenGLViewport(QOpenGLWidget):
                 DEBUG_RAY_FRAGMENT_SHADER,
                 GL_FRAGMENT_SHADER
             ),
+            validate=False,
         )
 
         # Cache the main shader uniform locations.
@@ -1520,5 +1527,3 @@ class OpenGLViewport(QOpenGLWidget):
         self.debug_ray = ray.render(length)
         self.update()
         return ray
-
-   

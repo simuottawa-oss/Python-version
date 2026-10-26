@@ -1,6 +1,5 @@
-PySide6
+# Tested Qt binding version for the macOS setup and graphics checks.
+PySide6==6.11.2
 PyOpenGL
 PyGLM
 numpy
-customtkinter
-Pillow
