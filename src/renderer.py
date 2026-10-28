@@ -13,6 +13,8 @@ import glm
 import numpy as np
 
 from ray import Ray
+from scene import SceneObject
+from mover import Mover
 
 from OpenGL.GL import *
 from OpenGL.GL.shaders import compileProgram, compileShader
@@ -52,6 +54,33 @@ void main()
         0.8,
         1.0
     );
+}
+"""
+
+GIZMO_VERTEX_SHADER = """
+#version 330 core
+
+layout (location = 0) in vec3 in_position;
+
+uniform mat4 view;
+uniform mat4 projection;
+
+void main()
+{
+    gl_Position = projection * view * vec4(in_position, 1.0);
+}
+"""
+
+GIZMO_FRAGMENT_SHADER = """
+#version 330 core
+
+uniform vec3 color;
+
+out vec4 frag_color;
+
+void main()
+{
+    frag_color = vec4(color, 1.0);
 }
 """
 
@@ -329,11 +358,15 @@ def loadObjFlatShaded(filename):
                                 normal[2],
                             ]
                         )
+                
+    positions_array = np.array(positions, dtype=np.float32)
+    local_min = positions_array.min(axis=0)
+    local_max = positions_array.max(axis=0)
 
     return np.asarray(
         output,
         dtype=np.float32,
-    )
+    ), local_min, local_max
 
 
 class Camera:
@@ -533,6 +566,13 @@ class OpenGLViewport(QOpenGLWidget):
     drag continuously without the pointer leaving the viewport. Horizontal motion
     changes yaw and vertical motion changes pitch, producing a look-around feel
     similar to a free-fly viewer.
+
+    Left-click interaction drives the move gizmo (see mover.Mover): a click first
+    checks whether it landed on one of the selected object's arrows, in which case
+    it starts a drag instead of anything else. While an arrow is grabbed, mouse
+    movement slides the object along that single axis; releasing the button ends
+    the drag. When the mouse isn't dragging an arrow, movement instead just updates
+    which arrow (if any) is hovered, so it can be highlighted before being clicked.
     """
 
     def __init__(
@@ -547,6 +587,14 @@ class OpenGLViewport(QOpenGLWidget):
         self.axisVAO = None
         self.axisVBO = None
         self.axisVertexCount = 0
+
+        # Move-gizmo state: the Mover for the currently selected object (if
+        # any), the object it's attached to, and the gizmo's own shader/VAO/VBO.
+        self.mover = None
+        self.selectedObject = None
+        self.gizmoShader = None
+        self.gizmo_vao = None
+        self.gizmo_vbo = None
         super().__init__(
             parent
         )
@@ -662,7 +710,9 @@ class OpenGLViewport(QOpenGLWidget):
             )
 
 
-        vertexData = loadObjFlatShaded(meshPath)
+        vertexData, local_min, local_max = loadObjFlatShaded(meshPath)
+        object.localMin = local_min
+        object.localMax = local_max
 
         vertexCount = (
             len(vertexData) // 6
@@ -795,6 +845,12 @@ class OpenGLViewport(QOpenGLWidget):
             ),
         )
 
+        # Compile and cache the move-gizmo shader.
+        self.gizmoShader = compileProgram(
+            compileShader(GIZMO_VERTEX_SHADER, GL_VERTEX_SHADER),
+            compileShader(GIZMO_FRAGMENT_SHADER, GL_FRAGMENT_SHADER),
+        )
+
         # Cache the main shader uniform locations.
         self.model_location = (
             glGetUniformLocation(
@@ -873,6 +929,13 @@ class OpenGLViewport(QOpenGLWidget):
             self.debug_ray_vao = glGenVertexArrays(1)
             self.debug_ray_vbo = glGenBuffers(1)
 
+        # Gizmo geometry changes every frame (it moves with the selected
+        # object), so only the VAO/VBO handles are created once here — their
+        # contents get re-uploaded in paintGL via GL_DYNAMIC_DRAW.
+        if self.gizmo_vao is None:
+            self.gizmo_vao = glGenVertexArrays(1)
+            self.gizmo_vbo = glGenBuffers(1)
+
         if self.scene is not None:
             for sceneObject in self.scene.objects:
                 
@@ -884,7 +947,9 @@ class OpenGLViewport(QOpenGLWidget):
                     )
                     continue 
                 
-                vertexData = loadObjFlatShaded(meshPath)
+                vertexData, local_min, local_max = loadObjFlatShaded(meshPath)
+                sceneObject.localMin = local_min
+                sceneObject.localMax = local_max
                 
                 vertexCount = (
                     len(vertexData) // 6
@@ -950,7 +1015,17 @@ class OpenGLViewport(QOpenGLWidget):
                     "vertexCount": vertexCount
                 }   
                 )
-                
+
+        # TEMPORARY: stand-in for real click-to-select object picking, which
+        # isn't implemented yet (see the stub at ray.checkCollisions()).
+        # Loads one object and attaches a Mover to it on startup purely so
+        # the gizmo can be built/tested end-to-end. Replace with real
+        # selection once object-click hit-testing lands.
+        test_object = SceneObject(name="TestCube", meshPath=str(Path(__file__).parent.parent / "teapot.obj"))
+        #test_object = SceneObject(name="TestObject", meshPath=str(Path(__file__).parent.parent / "Assets" / "Car.simuOPart"))
+        self.addNewObject(test_object)
+        self.mover = Mover(test_object)
+
         print(
             "OpenGL viewport initialized"
         )
@@ -997,8 +1072,9 @@ class OpenGLViewport(QOpenGLWidget):
         """Render one frame of the 3D scene.
 
         This method updates the camera, clears the framebuffer, calculates the
-        projection and view matrices, and draws both the axis helper and scene
-        objects.
+        projection and view matrices, and draws the axis helper, scene objects,
+        and - when an object is selected - the move gizmo on top of everything
+        else.
         """
         current_time = (
             time.perf_counter()
@@ -1281,7 +1357,49 @@ class OpenGLViewport(QOpenGLWidget):
             0
         )
 
+        # ---------------------------------------------------------
+        # DRAW GIZMO
+        # ---------------------------------------------------------
 
+        if self.mover is not None:
+            # Rebuild gizmo geometry every frame - it moves whenever the
+            # selected object does (including mid-drag), so it can't be
+            # uploaded once like the static axis grid/scene meshes.
+            vertex_data, segments = self.mover.build_render_data()
+
+            # Draw the gizmo without depth testing so it always stays on top
+            # and clickable, even if part of it is behind the mesh it's
+            # attached to. Restored right after so it doesn't affect anything
+            # drawn later this frame or the next.
+            glDisable(GL_DEPTH_TEST)
+            glUseProgram(self.gizmoShader)
+
+            gizmoViewLocation = glGetUniformLocation(self.gizmoShader, "view")
+            gizmoProjectionLocation = glGetUniformLocation(self.gizmoShader, "projection")
+            gizmoColorLocation = glGetUniformLocation(self.gizmoShader, "color")
+
+            glUniformMatrix4fv(gizmoViewLocation, 1, GL_FALSE, glm.value_ptr(view))
+            glUniformMatrix4fv(gizmoProjectionLocation, 1, GL_FALSE, glm.value_ptr(projection))
+
+            glBindVertexArray(self.gizmo_vao)
+            glBindBuffer(GL_ARRAY_BUFFER, self.gizmo_vbo)
+            glBufferData(GL_ARRAY_BUFFER, vertex_data.nbytes, vertex_data, GL_DYNAMIC_DRAW)
+
+            glEnableVertexAttribArray(0)
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * vertex_data.itemsize, ctypes.c_void_p(0))
+
+            # One draw call per axis, out of the single shared buffer, so
+            # each arrow can get its own color (and brighten when hovered).
+            for name, color, start_vertex, vertex_count in segments:
+                r, g, b = color
+                if name == self.mover.hovered_axis:
+                    r, g, b = min(r + 0.3, 1.0), min(g + 0.3, 1.0), min(b + 0.3, 1.0)
+                glUniform3f(gizmoColorLocation, r, g, b)
+                glDrawArrays(GL_TRIANGLES, start_vertex, vertex_count)
+
+            glBindVertexArray(0)
+            glUseProgram(0)
+            glEnable(GL_DEPTH_TEST)
 
 
     # ---------------------------------------------------------
@@ -1383,12 +1501,18 @@ class OpenGLViewport(QOpenGLWidget):
         )
 
     def mousePressEvent(self, event):
-        """Start look-around camera control while the right mouse button is held.
+        """Grab a gizmo arrow, or start look-around camera control.
 
-        The user is not orbiting around an object; they are turning the camera as if
-        they are looking around from inside the scene. Pressing the right mouse button
-        locks the cursor to the viewport and forces the pointer back to the center on
-        each movement step so continuous dragging feels smooth and stable.
+        Left-click first casts a ray and checks it against the selected
+        object's gizmo arrows (if any); a hit starts a drag on that axis and
+        nothing else happens this click. Otherwise the click falls through to
+        the (not yet implemented) scene object picking below.
+
+        Right mouse button is unrelated to the gizmo: the user is turning the
+        camera as if looking around from inside the scene, not orbiting an
+        object. Pressing it locks the cursor to the viewport and forces the
+        pointer back to the center on each movement step so continuous
+        dragging feels smooth and stable.
 
         Args:
             event: Qt mouse event.
@@ -1417,6 +1541,15 @@ class OpenGLViewport(QOpenGLWidget):
                 view
             )
 
+            # Check the gizmo before anything else - grabbing an arrow should
+            # start a drag, not also re-fire the debug ray or (eventually)
+            # re-pick a different object with the same click.
+            if self.mover is not None:
+                axis = self.mover.hit_test(origin, direction)
+                if axis is not None:
+                    self.mover.begin_drag(axis, origin, direction)
+                    return
+
             self.RenderRay(origin, direction, 100.0)
 
             print("click ray:", origin, direction)
@@ -1431,10 +1564,15 @@ class OpenGLViewport(QOpenGLWidget):
             self.center_mouse()
             
     def mouseReleaseEvent(self, event):
-        """Stop camera look-around control when the right mouse button is released.
+        """End a gizmo drag, or stop camera look-around control.
 
-        Releasing the button returns cursor control to the desktop and ends the
-        persistent drag state used for camera yaw/pitch updates.
+        Left-button release ends an in-progress axis drag, if one was
+        happening - without this, dragging_axis would stay set and the next
+        mouse move would keep moving the object even after the button is
+        no longer held.
+
+        Right-button release returns cursor control to the desktop and ends
+        the persistent drag state used for camera yaw/pitch updates.
 
         Args:
             event: Qt mouse event.
@@ -1448,19 +1586,47 @@ class OpenGLViewport(QOpenGLWidget):
 
             self.releaseMouse()
             self.unsetCursor()
+
+        if event.button() == Qt.LeftButton:
+            if self.mover is not None and self.mover.dragging_axis is not None:
+                self.mover.end_drag()
             
     def mouseMoveEvent(self, event):
-        """Rotate the camera based on drag movement while in look mode.
+        """Drag the gizmo, update its hover state, or rotate the camera.
 
-        Camera interaction here is implemented as a "look around" controller. The
-        cursor delta is translated into yaw and pitch changes on the Camera object,
-        so dragging left/right turns the view horizontally and dragging up/down tilts
-        the view vertically. A recenter step keeps the pointer from reaching the edge
-        of the widget, which would otherwise break the drag experience.
+        If a gizmo arrow is currently grabbed (dragging_axis is set), this
+        moves the selected object to follow the mouse along that axis and
+        stops there - the look-around logic below is intentionally skipped
+        while a drag is active. Otherwise, if a gizmo exists, the current
+        mouse ray is checked against its arrows purely to update which one
+        (if any) is hovered, for highlighting.
+
+        Camera look-around is a separate "look around" controller: the cursor
+        delta is translated into yaw and pitch changes on the Camera object,
+        so dragging left/right turns the view horizontally and dragging up/down
+        tilts the view vertically. A recenter step keeps the pointer from
+        reaching the edge of the widget, which would otherwise break the drag
+        experience.
 
         Args:
             event: Qt mouse move event.
         """
+        if self.mover is not None:
+            width = max(1, self.width())
+            height = max(1, self.height())
+
+            projection = glm.perspective(glm.radians(60.0), width / height, 0.1, 1000.0)
+            view = self.camera.view_matrix()
+
+            origin, direction = self.camera.mouse_ray(event, width, height, projection, view)
+
+            if self.mover.dragging_axis is not None:
+                self.mover.update_drag(origin, direction)
+                return
+
+            self.mover.hovered_axis = self.mover.hit_test(origin, direction)
+
+
         if not self.right_mouse_down:
             return
 

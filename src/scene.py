@@ -29,6 +29,8 @@ class SceneObject:
         self.position = [0.0, 0.0, 0.0]
         self.rotation = [0.0, 0.0, 0.0]
         self.scale = [1.0, 1.0, 1.0]
+        self.localMin = None
+        self.localMax = None
 
     # -------------------------------------------------
     # Dynamic Properties
