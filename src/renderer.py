@@ -1016,16 +1016,6 @@ class OpenGLViewport(QOpenGLWidget):
                 }   
                 )
 
-        # TEMPORARY: stand-in for real click-to-select object picking, which
-        # isn't implemented yet (see the stub at ray.checkCollisions()).
-        # Loads one object and attaches a Mover to it on startup purely so
-        # the gizmo can be built/tested end-to-end. Replace with real
-        # selection once object-click hit-testing lands.
-        test_object = SceneObject(name="TestCube", meshPath=str(Path(__file__).parent.parent / "teapot.obj"))
-        #test_object = SceneObject(name="TestObject", meshPath=str(Path(__file__).parent.parent / "Assets" / "Car.simuOPart"))
-        self.addNewObject(test_object)
-        self.mover = Mover(test_object)
-
         print(
             "OpenGL viewport initialized"
         )
@@ -1552,11 +1542,14 @@ class OpenGLViewport(QOpenGLWidget):
 
             ray = self.RenderRay(origin, direction, 100.0)
 
-            print("click ray:", origin, direction)
             objects = self.scene.objects if self.scene is not None else []
             hit = ray.checkCollisions(obj for obj in objects if obj.name != "Axis")
             if hit is not None:
-                print("Ray hit:", hit["object"].name, "at", hit["point"])
+                self.mover = Mover(hit["object"])
+            else:
+                self.mover = None
+
+            self.update()
 
         elif event.button() == Qt.RightButton:
             self.right_mouse_down = True
