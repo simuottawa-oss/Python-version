@@ -66,6 +66,32 @@ class NativeSelectionOutline(unittest.TestCase):
         image = self.viewport.grabFramebuffer().convertToFormat(QImage.Format.Format_RGBA8888)
         return np.frombuffer(image.bits(), np.uint8).reshape(image.height(), image.width(), 4).copy()
 
+    def test_box_selection_uses_visible_surfaces_and_xray_selects_through(self):
+        blocker = SceneObject("Blocker", self.cube.meshPath)
+        blocker.position[2] = 4
+        blocker.scale = [2, 2, 1]
+        self.scene.addObject(blocker)
+        self.viewport.addNewObject(blocker)
+        rect = (0, 0, 400, 300)
+        self.assertEqual(self.viewport.select_box(rect), [blocker.identifier])
+        self.viewport.tool_options['xray'] = True
+        self.assertEqual(self.viewport.select_box(rect), [self.cube.identifier, blocker.identifier])
+        self.viewport.tool_options['xray'] = False
+        blocker.selection_locked = True
+        self.assertEqual(self.viewport.select_box(rect), [])
+        blocker.editor_visible = False
+        self.assertEqual(self.viewport.select_box(rect), [self.cube.identifier])
+
+    def test_selection_buffer_resizes_and_preserves_normal_rendering(self):
+        before = self.pixels()
+        self.assertEqual(self.viewport.select_box((0, 0, 400, 300)), [self.cube.identifier])
+        np.testing.assert_array_equal(self.pixels(), before)
+        self.viewport.resize(500, 250)
+        self.app.processEvents()
+        self.assertEqual(self.viewport.select_box((240, 115, 260, 135)), [self.cube.identifier])
+        ratio = self.viewport.devicePixelRatioF()
+        self.assertEqual(self.viewport.selection_buffer.size, (round(500*ratio), round(250*ratio)))
+
     def test_selection_only_adds_a_blue_outline_and_preserves_the_surface(self):
         before = self.pixels()
         self.viewport.set_selected_object(self.cube)

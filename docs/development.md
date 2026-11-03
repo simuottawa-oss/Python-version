@@ -22,6 +22,9 @@ src/simuo/
 │   ├── ray.py                  # Ray data and debug line geometry
 │   ├── shaders.py              # GLSL source
 │   ├── outline.py              # Selection silhouette rendering
+│   ├── manipulation.py         # Projection, gizmos, constraints, box geometry
+│   ├── overlays.py             # Gizmo/selection painting in logical pixels
+│   ├── selection_buffer.py     # Depth-tested GPU IDs for box selection
 │   └── viewport.py             # Qt viewport, GPU resources, and input
 ├── ui/
 │   ├── main_window.py          # Menus, toolbar, dialogs, and editor wiring
@@ -29,7 +32,8 @@ src/simuo/
 │   ├── docking.py              # Panel containers and saved workspace layout
 │   ├── panel_registry.py       # Available panel factories and stable IDs
 │   ├── theme.py                # Package-resource stylesheet loading
-│   ├── viewport_tools.py       # Transform shortcuts and framing toolbar
+│   ├── viewport_tools.py       # Active tool rail
+│   ├── viewport_options.py     # Option dropdowns and hover explanations
 │   └── panels/
 │       ├── properties.py       # Properties form and inspector widgets
 │       └── hierarchy/
@@ -96,7 +100,7 @@ Tests are grouped by responsibility, with shared fixtures in `tests/support/`:
 | `tests/scene/` | Project-file compatibility and scene persistence |
 | `tests/editor/` | Editor history and complete scene-editing workflows |
 | `tests/ui/` | Hierarchy, groups, navigation, and docking |
-| `tests/rendering/` | Picking, viewport input, and native GPU outline checks |
+| `tests/rendering/` | Picking, gizmo math/input, and native GPU selection checks |
 | `tests/setup/` | Dependency/startup diagnostics; standard library only |
 | `tests/support/` | Repository paths, Qt application setup, recording viewport |
 

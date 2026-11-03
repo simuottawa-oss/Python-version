@@ -82,7 +82,7 @@ class HierarchyPanel(QWidget):
         self.new_group.setAccessibleName("New group")
         self.new_group.clicked.connect(self.create_group)
         self.reveal_button = self.action_button("reveal", "Show Selected")
-        self.reveal_button.setToolTip("Show selected objects in the hierarchy; clear search and filters, and expand their groups")
+        self.reveal_button.setToolTip("Show selected objects in the hierarchy. Clear search and filters and expand their groups.")
         self.reveal_button.setAccessibleName("Show Selected")
         self.reveal_button.clicked.connect(self.show_selected)
         layout.addLayout(tools)
@@ -377,7 +377,7 @@ class HierarchyPanel(QWidget):
         self.isolation_button.setText(isolation_label)
         self.isolation_button.setAccessibleName(isolation_label)
         self.isolation_button.setToolTip("Exit isolation and restore the scene (Escape)" if isolated
-                                         else "Isolate selected objects temporarily; click again or press Escape to restore the scene")
+                                         else "Isolate selected objects temporarily. Click again or press Escape to restore the scene.")
         with QSignalBlocker(self.isolation_button):
             self.isolation_button.setChecked(isolated)
         self.isolation_button.setEnabled(isolated or bool(selected))

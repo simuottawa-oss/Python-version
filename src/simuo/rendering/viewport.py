@@ -9,7 +9,7 @@ import glm
 from OpenGL.GL import *
 from OpenGL.GL.shaders import compileProgram, compileShader
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
-from PySide6.QtCore import Qt, QTimer, QPoint, Signal
+from PySide6.QtCore import Qt, QTimer, QPoint, Signal, Slot
 from PySide6.QtGui import QCursor
 
 from simuo.rendering.camera import Camera
@@ -18,6 +18,9 @@ from simuo.rendering.meshes import load_obj_flat_shaded
 from simuo.rendering.picking import PickMesh, object_matrix, pick_object
 from simuo.rendering.ray import Ray
 from simuo.rendering.outline import SelectionOutline
+from simuo.rendering.manipulation import Gizmo, Projection, TransformDrag, box_candidates
+from simuo.rendering.overlays import InteractionOverlay
+from simuo.rendering.selection_buffer import SelectionBuffer
 from simuo.rendering.shaders import (
     AXIS_VERTEX_SHADER, AXIS_FRAGMENT_SHADER,
     DEBUG_RAY_VERTEX_SHADER, DEBUG_RAY_FRAGMENT_SHADER,
@@ -49,6 +52,11 @@ class OpenGLViewport(QOpenGLWidget):
     frame_requested = Signal()
     frame_scene_requested = Signal()
     escape_requested = Signal()
+    box_selection_requested = Signal(object)
+    transform_started = Signal(object, str)
+    transform_previewed = Signal(object)
+    transform_finished = Signal(bool)
+    tools_visibility_requested = Signal()
 
     CAMERA_KEYS = frozenset((Qt.Key_W, Qt.Key_A, Qt.Key_S, Qt.Key_D, Qt.Key_Space, Qt.Key_C))
     SHORTCUT_KEYS = frozenset((Qt.Key_Control, Qt.Key_Meta, Qt.Key_Alt, Qt.Key_AltGr))
@@ -75,6 +83,16 @@ class OpenGLViewport(QOpenGLWidget):
         self.scene = scene
         self.selected_object_id = None
         self.selected_object_ids = set()
+        self.selected_objects = ()
+        self.active_tool = "select"
+        self.tool_options = {"orientation": "world", "pivot": "median", "snap": False, "xray": False}
+        self.drag = None
+        self.hover_handle = None
+        self._box_start = self._box_end = None
+        self._box_dragged = False
+        self._selection_before = ()
+        self._selection_modifiers = Qt.NoModifier
+        self.selection_buffer = None
         self.pick_modifiers = Qt.KeyboardModifier.NoModifier
         self._mesh_data = {}
 
@@ -109,6 +127,7 @@ class OpenGLViewport(QOpenGLWidget):
         self.projection_location = None
         self.camera_location = None
         self.selection_outline = None
+        self.interaction_overlay = InteractionOverlay(self)
 
         # Frame timing state.
         self.last_time = (
@@ -136,17 +155,109 @@ class OpenGLViewport(QOpenGLWidget):
     def set_selected_object(self, obj):
         self.selected_object_id = obj.identifier if obj is not None else None
         self.selected_object_ids = {obj.identifier} if obj is not None else set()
+        self.selected_objects = (obj,) if obj is not None else ()
+        self.interaction_overlay.update()
         self.update()
 
     def set_selected_objects(self, objects):
+        self.selected_objects = tuple(objects)
         self.selected_object_ids = {obj.identifier for obj in objects}
         self.selected_object_id = objects[-1].identifier if objects else None
         self.update()
+
+    def set_tool(self, tool):
+        self.cancel_interaction()
+        self.active_tool = tool
+        self.hover_handle = None
+        self.interaction_overlay.update()
+
+    def set_tool_options(self, options):
+        self.cancel_interaction()
+        self.tool_options = dict(options)
+        self.interaction_overlay.update()
+
+    def projection(self):
+        return Projection(self.camera, self.width(), self.height())
+
+    def gizmo(self):
+        if self.active_tool == "select":
+            return None
+        rendered = {item['SceneObject'].identifier for item in self.renderObjects
+                    if item.get('pick_mesh') is not None and len(item['pick_mesh'].triangles)}
+        objects = [obj for obj in self.selected_objects if obj.identifier in rendered
+                   and obj.viewport_visible and not obj.viewport_locked]
+        if not objects:
+            return None
+        return Gizmo(objects, self.active_tool, self.projection(), self.tool_options['orientation'], self.tool_options['pivot'])
+
+    def box_rect(self):
+        if not self._box_dragged or self._box_start is None:
+            return None
+        a, b = self._box_start, self._box_end
+        return min(a[0], b[0]), min(a[1], b[1]), max(a[0], b[0]), max(a[1], b[1])
+
+    def select_box(self, rect):
+        projection = self.projection()
+        if self.tool_options['xray'] or not self.isValid():
+            return box_candidates(self.renderObjects, projection, rect)
+        self.makeCurrent()
+        try:
+            if self.selection_buffer is None:
+                self.selection_buffer = SelectionBuffer()
+            ratio = self.devicePixelRatioF()
+            return self.selection_buffer.select(self.renderObjects, projection, rect,
+                                                max(1, round(self.width()*ratio)), max(1, round(self.height()*ratio)),
+                                                ratio, self.defaultFramebufferObject())
+        finally:
+            self.doneCurrent()
+            self.update()
+
+    def discard_transform(self):
+        self.drag = None
+        self.keys.clear()
+        if self.isVisible() and not self.right_mouse_down:
+            self.releaseMouse()
+        self.unsetCursor()
+        self.interaction_overlay.update()
+
+    def cancel_interaction(self):
+        if self.drag is not None:
+            self.drag = None
+            self.transform_finished.emit(False)
+            self.discard_transform()
+        if self._box_start is not None:
+            if self._box_dragged:
+                self.box_selection_requested.emit(self._selection_before)
+            self._box_start = self._box_end = None
+            self._box_dragged = False
+            self.keys.clear()
+            self.unsetCursor()
+            self.interaction_overlay.update()
+
+    def resizeEvent(self, event):
+        if hasattr(self, 'interaction_overlay'):
+            self.cancel_interaction()
+            self.interaction_overlay.setGeometry(self.rect())
+            self.layout_tools()
+        super().resizeEvent(event)
+
+    def layout_tools(self):
+        toolbar = getattr(self, 'tool_sidebar', None)
+        context = getattr(self, 'tool_context', None)
+        if context is not None:
+            context.fit_to_width(max(1, self.width()-16))
+            context.raise_()
+        if toolbar is not None:
+            toolbar.adjustSize()
+            toolbar.move(8, context.geometry().bottom()+9 if context is not None else 8)
+            toolbar.raise_()
 
     def frame_object(self, obj):
         """Fit the transformed mesh to the view while preserving camera rotation."""
         from itertools import product
 
+        self.cancel_interaction()
+        self.keys.clear()
         objects = (obj,) if hasattr(obj, "identifier") else tuple(obj)
         keys = {item.identifier for item in objects if item.viewport_visible}
         corners = []
@@ -211,12 +322,18 @@ class OpenGLViewport(QOpenGLWidget):
             self._mesh_data[path] = load_obj_flat_shaded(path)
         return self._mesh_data[path]
 
+    @Slot()
     def cleanup_outline(self):
         """Release outline resources while their OpenGL context is still alive."""
         if self.selection_outline is not None:
             self.makeCurrent()
             self.selection_outline.cleanup()
             self.selection_outline = None
+            self.doneCurrent()
+        if self.selection_buffer is not None:
+            self.makeCurrent()
+            self.selection_buffer.cleanup()
+            self.selection_buffer = None
             self.doneCurrent()
 
     def clearRenderObjects(self):
@@ -646,6 +763,16 @@ class OpenGLViewport(QOpenGLWidget):
         self.update_camera(
             delta_time
         )
+        self.interaction_overlay.update()
+
+        # Qt paints child controls/overlays with its own GL state between frames.
+        glEnable(GL_DEPTH_TEST)
+        glDepthMask(GL_TRUE)
+        glDepthFunc(GL_LESS)
+        glDisable(GL_BLEND)
+        glDisable(GL_SCISSOR_TEST)
+        glDisable(GL_CULL_FACE)
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE)
 
         ratio = (
             self.devicePixelRatioF()
@@ -878,6 +1005,8 @@ class OpenGLViewport(QOpenGLWidget):
         Args:
             delta_time: Time elapsed since the previous frame.
         """
+        if self.drag is not None or self._box_start is not None:
+            return
         speed = (
             10.0
             * delta_time
@@ -927,6 +1056,7 @@ class OpenGLViewport(QOpenGLWidget):
     def focusOutEvent(self, event):
         """Stop camera input when the user moves focus into an editor panel."""
         self.keys.clear()
+        self.cancel_interaction()
         if self.right_mouse_down:
             self.right_mouse_down = False
             self.ignore_center_event = False
@@ -961,7 +1091,15 @@ class OpenGLViewport(QOpenGLWidget):
             event.accept()
             return
         if event.key() == Qt.Key_Escape:
+            if self.drag is not None or self._box_start is not None:
+                self.cancel_interaction()
+                event.accept()
+                return
             self.escape_requested.emit()
+            event.accept()
+            return
+        if event.key() == Qt.Key_T and event.modifiers() == Qt.NoModifier:
+            self.tools_visibility_requested.emit()
             event.accept()
             return
         if event.key() in self.CAMERA_KEYS:
@@ -1003,6 +1141,24 @@ class OpenGLViewport(QOpenGLWidget):
             if self.right_mouse_down:
                 return
             self.setFocus()
+            self.keys.clear()
+            point = (event.position().x(), event.position().y())
+            gizmo = self.gizmo()
+            handle = gizmo.hit(point) if gizmo is not None else None
+            modifiers = event.modifiers() & (Qt.ControlModifier | Qt.MetaModifier | Qt.ShiftModifier | Qt.AltModifier)
+            if handle is not None and not modifiers:
+                self.drag = TransformDrag(gizmo, handle, point)
+                self.transform_started.emit(tuple(obj.identifier for obj in gizmo.objects), self.active_tool.title() + ' Objects')
+                if self.isVisible():
+                    self.grabMouse()
+                self.interaction_overlay.update()
+                event.accept()
+                return
+            if self.active_tool == 'select':
+                self._box_start = self._box_end = point
+                self._box_dragged = False
+                self._selection_before = tuple(obj.identifier for obj in self.selected_objects)
+                self._selection_modifiers = event.modifiers()
             width, height = max(1, self.width()), max(1, self.height())
             projection = glm.perspective(
                 glm.radians(self.camera.field_of_view), width / height,
@@ -1023,6 +1179,10 @@ class OpenGLViewport(QOpenGLWidget):
             event.accept()
 
         elif event.button() == Qt.RightButton:
+            if self.drag is not None or self._box_start is not None:
+                self.cancel_interaction()
+                event.accept()
+                return
             self.right_mouse_down = True
             self.setCursor(Qt.BlankCursor)
             self.grabMouse()
@@ -1039,6 +1199,35 @@ class OpenGLViewport(QOpenGLWidget):
         Args:
             event: Qt mouse event.
         """
+        if event.button() == Qt.LeftButton:
+            if self.drag is not None:
+                point = (event.position().x(), event.position().y())
+                if self.drag.feedback or tuple(self.drag.start) != point:
+                    self.transform_previewed.emit(self.drag.updates(point, self.tool_options['snap'], bool(event.modifiers() & Qt.ShiftModifier)))
+                self.drag = None
+                self.transform_finished.emit(True)
+                self.discard_transform()
+            elif self._box_start is not None:
+                self._box_end = (event.position().x(), event.position().y())
+                rect = self.box_rect()
+                if rect is not None:
+                    found = self.select_box(rect)
+                    before = self._selection_before
+                    modifiers = self._selection_modifiers
+                    if modifiers & (Qt.ControlModifier | Qt.MetaModifier):
+                        selection = [key for key in before if key not in found] + [key for key in found if key not in before]
+                    elif modifiers & Qt.ShiftModifier:
+                        selection = list(dict.fromkeys((*before, *found)))
+                    else:
+                        selection = found
+                    self.box_selection_requested.emit(tuple(selection))
+                self._box_start = self._box_end = None
+                self._box_dragged = False
+                self.keys.clear()
+                self.unsetCursor()
+                self.interaction_overlay.update()
+            event.accept()
+            return
         if event.button() == Qt.RightButton:
             # Clear the drag state when rotation ends.
             self.right_mouse_down = False
@@ -1061,7 +1250,27 @@ class OpenGLViewport(QOpenGLWidget):
         Args:
             event: Qt mouse move event.
         """
+        point = (event.position().x(), event.position().y())
+        if self.drag is not None:
+            self.transform_previewed.emit(self.drag.updates(point, self.tool_options['snap'], bool(event.modifiers() & Qt.ShiftModifier)))
+            self.interaction_overlay.update()
+            event.accept()
+            return
+        if self._box_start is not None and event.buttons() & Qt.LeftButton:
+            self._box_end = point
+            if abs(point[0]-self._box_start[0])+abs(point[1]-self._box_start[1]) >= 5:
+                self._box_dragged = True
+                self.keys.clear()
+                self.setCursor(Qt.CrossCursor)
+            self.interaction_overlay.update()
+            event.accept()
+            return
         if not self.right_mouse_down:
+            gizmo = self.gizmo()
+            handle = gizmo.hit(point) if gizmo is not None else None
+            self.hover_handle = handle.key if handle is not None else None
+            self.setCursor(Qt.SizeAllCursor if handle is not None else Qt.ArrowCursor)
+            self.interaction_overlay.update()
             return
 
         center = self.rect().center()

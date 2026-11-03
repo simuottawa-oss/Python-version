@@ -53,13 +53,20 @@ class SimuOMainWindow(QMainWindow):
         self.setStyleSheet(load_stylesheet("main_window"))
 
         self.createMenus()
-        self.createToolbar()
 
         self.viewport = OpenGLViewport(self, scene=self.scene)
-        self.viewport.setMinimumSize(320, 240)
+        self.viewport.setMinimumSize(320, 280)
 
         self.setCentralWidget(self.viewport)
+        self.createToolbar()
         self.viewport.object_picked.connect(self.onViewportPicked)
+        self.viewport.box_selection_requested.connect(self.editor_state.select_many)
+        self.viewport.transform_started.connect(self.editor_state.begin_transform)
+        self.viewport.transform_previewed.connect(self.editor_state.preview_transform)
+        self.viewport.transform_finished.connect(self.editor_state.finish_transform)
+        self.editor_state.transform_ended.connect(self.viewport.discard_transform)
+        self.editor_state.tool_changed.connect(self.viewport.set_tool)
+        self.editor_state.tool_options_changed.connect(self.viewport.set_tool_options)
         self.editor_state.selection_set_changed.connect(self.viewport.set_selected_objects)
         self.viewport.frame_requested.connect(self.editor_state.frame_selected)
         self.viewport.frame_scene_requested.connect(self.editor_state.frame_scene)
@@ -89,6 +96,7 @@ class SimuOMainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """Remember the workspace when the editor closes normally."""
+        self.viewport.cancel_interaction()
         if not self.confirmDiscardChanges():
             event.ignore()
             return
@@ -130,8 +138,6 @@ class SimuOMainWindow(QMainWindow):
         self.showSelectedAction.setEnabled(selected)
         self.frameSelectedAction.setEnabled(any(obj.viewport_visible for obj in self.editor_state.selected_objects))
         self.frameSceneAction.setEnabled(any(obj.viewport_visible and obj.meshPath is not None for obj in self.scene.objects))
-        for action in self.transformActions.values():
-            action.setEnabled(selected)
         self.isolateAction.setEnabled(selected or self.editor_state.isolated_ids is not None)
         self.isolateAction.setChecked(self.editor_state.isolated_ids is not None)
 
@@ -160,6 +166,8 @@ class SimuOMainWindow(QMainWindow):
 
     def confirmDiscardChanges(self):
         """Return whether the current scene may safely be replaced or closed."""
+        self.viewport.cancel_interaction()
+        self.editor_state.cancel_transform()
         if not self.scene.dirty:
             return True
         response = QMessageBox.question(
@@ -198,6 +206,7 @@ class SimuOMainWindow(QMainWindow):
 
     def loadFile(self, path, uploadToGPU=True):
         """Read a project, replace editor state, and upload its meshes when requested."""
+        self.viewport.cancel_interaction()
         objects, groups, root_order = load_project(path)
         if uploadToGPU:
             self.viewport.clearRenderObjects()
@@ -260,6 +269,8 @@ class SimuOMainWindow(QMainWindow):
 
     def writeProject(self, path):
         """Save the project, retaining the old path and dirty flag on failure."""
+        self.viewport.cancel_interaction()
+        self.editor_state.cancel_transform()
         focus = QApplication.focusWidget()
         if isinstance(focus, (QLineEdit, QAbstractSpinBox)) and self.isAncestorOf(focus):
             focus.clearFocus()
@@ -303,6 +314,9 @@ class SimuOMainWindow(QMainWindow):
         stack = self.editor_state.undo_stack
         self.undoAction = stack.createUndoAction(self, "Undo")
         self.redoAction = stack.createRedoAction(self, "Redo")
+        for action, operation in ((self.undoAction, stack.undo), (self.redoAction, stack.redo)):
+            action.triggered.disconnect()
+            action.triggered.connect(lambda checked=False, operation=operation: self.historyStep(operation))
         self.undoAction.setShortcuts(QKeySequence.keyBindings(QKeySequence.StandardKey.Undo))
         self.redoAction.setShortcuts(QKeySequence.keyBindings(QKeySequence.StandardKey.Redo))
         self.duplicateAction = QAction("Duplicate", self)
@@ -326,6 +340,9 @@ class SimuOMainWindow(QMainWindow):
         self.editMenu.addActions([self.duplicateAction, self.deleteAction, self.selectAllAction, self.groupAction])
 
         self.viewMenu = self.menuBar().addMenu("View")
+        self.toolsVisibleAction = self.viewMenu.addAction("Viewport Tools")
+        self.toolsVisibleAction.setCheckable(True)
+        self.toolsVisibleAction.setChecked(True)
         self.frameSelectedAction = self.viewMenu.addAction("Frame Selected", self.editor_state.frame_selected)
         self.frameSceneAction = self.viewMenu.addAction("Frame Scene", self.editor_state.frame_scene)
         self.showSelectedAction = self.viewMenu.addAction("Show Selected in Hierarchy", self.showSelectedInHierarchy)
@@ -382,10 +399,15 @@ class SimuOMainWindow(QMainWindow):
     # ---------------------------------------------------------
 
     def createToolbar(self):
-        """Offer real actions rather than unimplemented, mutually exclusive modes."""
-        self.viewport_tools, self.transformActions = create_viewport_tools(
-            self, self.focusProperties, self.frameSelectedAction, self.frameSceneAction,
+        """Keep active tools and options inside the viewport."""
+        self.viewport_tools, self.toolActions = create_viewport_tools(
+            self.viewport, self.editor_state, self.toolsVisibleAction,
         )
+
+    def historyStep(self, operation):
+        self.viewport.cancel_interaction()
+        self.editor_state.cancel_transform()
+        operation()
 
     def focusProperties(self, attribute):
         """Bring an existing inspector into view instead of opening a dialog."""

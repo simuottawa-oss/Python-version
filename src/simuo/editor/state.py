@@ -21,6 +21,9 @@ class EditorState(QObject):
     frame_requested = Signal(object)
     dirty_changed = Signal()
     view_changed = Signal()
+    tool_changed = Signal(str)
+    tool_options_changed = Signal(object)
+    transform_ended = Signal()
 
     def __init__(self, scene, parent=None):
         super().__init__(parent)
@@ -30,6 +33,9 @@ class EditorState(QObject):
         self.drag_token = uuid4().hex
         self._selected_ids = ()
         self.scene_name = "Untitled Scene"
+        self.active_tool = "select"
+        self.tool_options = {"orientation": "world", "pivot": "median", "snap": False, "xray": False}
+        self._transform = None
         self._base_dirty = scene.dirty
         self.undo_stack = QUndoStack(self)
         self.undo_stack.indexChanged.connect(self._history_changed)
@@ -71,11 +77,13 @@ class EditorState(QObject):
             self.view_changed.emit()
 
     def isolate_selected(self):
+        self.cancel_transform()
         if self.selected_ids:
             self.isolated_ids = frozenset(self.selected_ids)
             self._refresh_view()
 
     def exit_isolation(self):
+        self.cancel_transform()
         self.isolated_ids = None
         self._refresh_view()
 
@@ -84,6 +92,7 @@ class EditorState(QObject):
         self.dirty_changed.emit()
 
     def mark_saved(self):
+        self.cancel_transform()
         self._base_dirty = False
         self.undo_stack.setClean()
         self._history_changed()
@@ -118,6 +127,7 @@ class EditorState(QObject):
         valid = {obj.identifier for obj in self.scene.objects}
         identifiers = tuple(dict.fromkeys(key for key in identifiers if key in valid))
         if identifiers != self._selected_ids:
+            self.cancel_transform()
             self._selected_ids = identifiers
             self._emit_selection()
 
@@ -148,6 +158,7 @@ class EditorState(QObject):
             self.frame_requested.emit(visible[0] if len(visible) == 1 else visible)
 
     def _edit(self, text, updates):
+        self.cancel_transform()
         changes = [(obj, attribute, deepcopy(getattr(obj, attribute)), deepcopy(value))
                    for obj, attribute, value in updates if getattr(obj, attribute) != value]
         if not changes:
@@ -175,6 +186,7 @@ class EditorState(QObject):
 
     def replace_objects(self, objects, groups=(), root_order=()):
         """Start a new history when loading or creating a scene."""
+        self.cancel_transform()
         self._selected_ids = ()
         self.scene.objects.clear()
         self.scene.groups[:] = groups
@@ -192,6 +204,7 @@ class EditorState(QObject):
         self._emit_selection()
 
     def add_object(self, obj):
+        self.cancel_transform()
         if self.find_object(obj.identifier) is not None or self.find_group(obj.identifier) is not None:
             obj.identifier = uuid4().hex
         self.undo_stack.push(SceneEdit(self, "Import Object", [*self.scene.objects, obj], self.selected_ids))
@@ -216,6 +229,7 @@ class EditorState(QObject):
         return self.set_transform_components((identifier,), attribute, axis, value)
 
     def set_transform_components(self, identifiers, attribute, axis, value):
+        self.cancel_transform()
         if attribute not in ("position", "rotation", "scale") or axis not in (0, 1, 2):
             raise ValueError("Unknown transform component")
         value = float(value)
@@ -229,6 +243,7 @@ class EditorState(QObject):
         return self._edit("Change " + attribute.title(), updates)
 
     def duplicate_selected(self):
+        self.cancel_transform()
         sources = self._objects(self.selected_ids)
         if not sources:
             return
@@ -256,12 +271,14 @@ class EditorState(QObject):
                                        [obj.identifier for obj in copies], organization))
 
     def delete_selected(self):
+        self.cancel_transform()
         if self.selected_objects:
             keys = set(self.selected_ids)
             self.undo_stack.push(SceneEdit(self, "Delete Objects",
                                            [obj for obj in self.scene.objects if obj.identifier not in keys], ()))
 
     def create_group(self, name="Group", identifiers=()):
+        self.cancel_transform()
         names = {group.name for group in self.scene.groups}
         base, index = name.strip() or "Group", 1
         name = base
@@ -296,6 +313,7 @@ class EditorState(QObject):
             self._edit("Lock Group" if locked else "Unlock Group", [(group, "selection_locked", bool(locked))])
 
     def remove_group(self, identifier):
+        self.cancel_transform()
         group = self.find_group(identifier)
         if group is None:
             return
@@ -306,6 +324,7 @@ class EditorState(QObject):
 
     def move_objects(self, identifiers, group_id=None, before=None):
         """Move a selection as one stable block, without modifying transforms."""
+        self.cancel_transform()
         group = self.find_group(group_id)
         if group_id is not None and group is None:
             return False
@@ -328,6 +347,7 @@ class EditorState(QObject):
         return True
 
     def move_group(self, identifier, before=None):
+        self.cancel_transform()
         if self.find_group(identifier) is None or before == identifier:
             return False
         groups, roots = self.organization()
@@ -340,3 +360,75 @@ class EditorState(QObject):
             return False
         self.undo_stack.push(SceneEdit(self, "Move Group", self.scene.objects, self.selected_ids, organization))
         return True
+
+    def set_tool(self, tool):
+        if tool not in ("select", "move", "rotate", "scale"):
+            raise ValueError("Unknown viewport tool")
+        if tool != self.active_tool:
+            self.cancel_transform()
+            self.active_tool = tool
+            self.tool_changed.emit(tool)
+
+    def set_tool_options(self, **updates):
+        options = {**self.tool_options, **updates}
+        if (set(options) != set(self.tool_options) or options["orientation"] not in ("world", "local")
+                or options["pivot"] not in ("median", "active")
+                or not isinstance(options["snap"], bool) or not isinstance(options["xray"], bool)):
+            raise ValueError("Invalid viewport tool options")
+        if options != self.tool_options:
+            self.cancel_transform()
+            self.tool_options = options
+            self.tool_options_changed.emit(dict(options))
+
+    def begin_transform(self, identifiers, label):
+        self.cancel_transform()
+        objects = [obj for obj in self._objects(identifiers) if obj.viewport_visible and not obj.viewport_locked]
+        if not objects:
+            return
+        before = {obj.identifier: {name: list(getattr(obj, name)) for name in ("position", "rotation", "scale")}
+                  for obj in objects}
+        self._transform = (objects, before, self.scene.dirty, label)
+
+    def preview_transform(self, updates):
+        if self._transform is None:
+            return
+        objects, before, dirty, label = self._transform
+        validated = []
+        for obj in objects:
+            values = updates.get(obj.identifier, {})
+            for name, vector in values.items():
+                if name not in ("position", "rotation", "scale") or len(vector) != 3:
+                    raise ValueError("Invalid transform preview")
+                vector = [float(value) for value in vector]
+                if not all(math.isfinite(value) for value in vector):
+                    raise ValueError("Non-finite transform preview")
+                validated.append((obj, name, vector))
+        for obj, name, vector in validated:
+            setattr(obj, name, vector)
+        changed = any(list(getattr(obj, name)) != vector for obj in objects
+                      for name, vector in before[obj.identifier].items())
+        self.scene.dirty = dirty or changed
+        self.dirty_changed.emit()
+        for obj in objects:
+            self.object_changed.emit(obj)
+
+    def finish_transform(self, commit=True):
+        if self._transform is None:
+            return
+        objects, before, dirty, label = self._transform
+        self._transform = None
+        changes = [(obj, name, original, list(getattr(obj, name))) for obj in objects
+                   for name, original in before[obj.identifier].items() if list(getattr(obj, name)) != original]
+        if commit and changes:
+            self.undo_stack.push(ObjectEdit(self, label, changes))
+        else:
+            for obj in objects:
+                for name, vector in before[obj.identifier].items():
+                    setattr(obj, name, list(vector))
+                self.object_changed.emit(obj)
+            self.scene.dirty = dirty
+            self.dirty_changed.emit()
+        self.transform_ended.emit()
+
+    def cancel_transform(self):
+        self.finish_transform(False)

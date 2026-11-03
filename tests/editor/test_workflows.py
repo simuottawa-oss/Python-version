@@ -123,34 +123,73 @@ class EditorWorkflow(unittest.TestCase):
         self.assertEqual(self.scene.objects[0].position[0], 0.0)
         self.assertEqual(self.properties.transform_inputs["position"][0].value(), 0.0)
 
-    def test_toolbar_focuses_properties_and_recovers_hidden_panels(self):
+    def test_toolbar_switches_real_modes_without_opening_properties(self):
         self.select_second()
         dock = self.window.panel_manager.docks["properties"]
-        for attribute in ("position", "rotation", "scale"):
-            dock.hide()
-            self.window.transformActions[attribute].trigger()
-            self.app.processEvents()
-            self.assertTrue(dock.isVisible())
-            self.assertIs(dock.focusWidget(), self.properties.transform_inputs[attribute][0])
-            self.assertIsNone(self.app.activeModalWidget())
-        self.state.select(None)
-        self.window.panel_manager.docks["object_hierarchy"].hide()
-        self.window.focusProperties("position")
-        self.assertTrue(self.window.panel_manager.docks["object_hierarchy"].isVisible())
+        dock.hide()
+        for tool in ("move", "rotate", "scale", "select"):
+            self.window.toolActions[tool].trigger()
+            self.assertEqual(self.state.active_tool, tool)
+            self.assertEqual(self.window.viewport.active_tool, tool)
+            self.assertTrue(self.window.toolActions[tool].isChecked())
+            self.assertFalse(dock.isVisible())
+        self.assertFalse(self.scene.dirty)
+        self.assertEqual(self.state.undo_stack.count(), 0)
 
-    def test_viewport_toolbar_tracks_selection_and_has_no_placeholder_modes(self):
-        self.assertFalse(any(action.isEnabled() for action in self.window.transformActions.values()))
+    def test_viewport_toolbar_options_and_visibility(self):
+        toolbar = self.window.viewport_tools
+        self.assertIs(toolbar.parentWidget(), self.window.viewport)
+        self.assertTrue(all(action.isEnabled() for action in self.window.toolActions.values()))
         self.assertFalse(self.window.frameSelectedAction.isEnabled())
         self.assertTrue(self.window.frameSceneAction.isEnabled())
-        actions = [action for action in self.window.viewport_tools.actions() if action.text()]
-        self.assertEqual([action.text() for action in actions],
-                         ["Edit Position", "Edit Rotation", "Edit Scale", "Frame Selected", "Frame Scene"])
-        self.assertTrue(all(not action.isCheckable() for action in actions))
-        self.select_second()
-        self.assertTrue(all(action.isEnabled() for action in self.window.transformActions.values()))
-        self.assertTrue(self.window.frameSelectedAction.isEnabled())
-        self.window.newProject()
-        self.assertFalse(self.window.frameSceneAction.isEnabled())
+        self.window.toolActions['move'].trigger()
+        toolbar.orientation_input.setCurrentIndex(1)
+        toolbar.pivot_input.setCurrentIndex(1)
+        toolbar.snap_button.click()
+        self.assertEqual(self.state.tool_options, {"orientation": "local", "pivot": "active", "snap": True, "xray": False})
+        self.window.toolActions['scale'].trigger()
+        self.assertFalse(toolbar.orientation_input.isEnabled())
+        self.window.toolActions['select'].trigger()
+        toolbar.xray_button.click()
+        self.assertTrue(self.state.tool_options['xray'])
+        self.window.viewport.tools_visibility_requested.emit()
+        self.assertTrue(toolbar.isHidden())
+        self.assertFalse(self.window.toolsVisibleAction.isChecked())
+        self.window.toolsVisibleAction.trigger()
+        self.assertFalse(toolbar.isHidden())
+        self.assertFalse(self.scene.dirty)
+
+    def test_drag_preview_updates_properties_and_commits_one_undo_step(self):
+        obj = self.select_second()
+        viewport = self.window.viewport
+        original = list(obj.position)
+        viewport.transform_started.emit((obj.identifier,), "Move Objects")
+        for x in (2, 3, 4):
+            viewport.transform_previewed.emit({obj.identifier: {'position': [x, 2, 3]}})
+            self.assertEqual(self.properties.transform_inputs['position'][0].value(), x)
+            self.assertEqual(self.state.undo_stack.count(), 0)
+        viewport.transform_finished.emit(True)
+        self.assertEqual(self.state.undo_stack.count(), 1)
+        self.window.undoAction.trigger()
+        self.assertEqual(obj.position, original)
+        self.assertFalse(self.scene.dirty)
+        self.window.redoAction.trigger()
+        self.assertEqual(obj.position, [4, 2, 3])
+
+    def test_save_and_undo_cancel_unfinished_drag_previews(self):
+        obj = self.select_second()
+        self.state.set_transform_component(obj.identifier, 'position', 0, 10)
+        self.state.mark_saved()
+        self.state.begin_transform((obj.identifier,), 'Move Objects')
+        self.state.preview_transform({obj.identifier: {'position': [20, 20, 20]}})
+        path = self.folder / 'no-preview.simuO'
+        self.window.writeProject(path)
+        self.assertEqual(json.loads(path.read_text())['objects'][1]['position'][0], 10)
+        self.state.begin_transform((obj.identifier,), 'Move Objects')
+        self.state.preview_transform({obj.identifier: {'position': [30, 30, 30]}})
+        self.window.undoAction.trigger()
+        self.assertEqual(obj.position[0], 1.123456)
+        self.assertEqual(obj.position[1:], [2, 3])
 
     def test_frame_scene_toolbar_and_shortcut_respect_visibility_and_preserve_selection(self):
         selected = self.select_second()

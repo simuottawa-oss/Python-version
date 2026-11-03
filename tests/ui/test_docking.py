@@ -153,7 +153,7 @@ class PanelWorkspaces(unittest.TestCase):
         )
         self.assertEqual(
             [action.text() for action in window.viewMenu.actions() if not action.isSeparator()],
-            ["Frame Selected", "Frame Scene", "Show Selected in Hierarchy", "Isolate Selected",
+            ["Viewport Tools", "Frame Selected", "Frame Scene", "Show Selected in Hierarchy", "Isolate Selected",
              "Object Hierarchy", "Properties", "Reset Layout"],
         )
         window.panel_manager.docks["properties"].close()

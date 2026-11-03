@@ -232,7 +232,7 @@ class PropertiesPanel(QWidget):
             self.name_input.setText(f"{len(selected)} objects selected" if multiple else obj.name if obj is not None else "")
         self.name_input.setEnabled(not multiple)
         self.selection_hint.setVisible(multiple)
-        self.selection_hint.setText("Transform edits apply to all selected objects. — means mixed values.")
+        self.selection_hint.setText("Transform edits apply to all selected objects. A dash marks different values.")
         path = Path(obj.meshPath) if obj is not None and obj.meshPath is not None else None
         self.mesh_name.setText(path.name if path is not None else "No mesh assigned")
         if multiple and len({str(item.meshPath) for item in selected}) > 1:
