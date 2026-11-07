@@ -4,6 +4,7 @@ This module loads OBJ meshes, builds transformation matrices, and renders scene
 objects in a Qt-based OpenGL viewport.
 """
 import math
+import sys
 import time
 import ctypes
 
@@ -659,6 +660,10 @@ class OpenGLViewport(QOpenGLWidget):
             GL_DEPTH_TEST
         )
 
+        # On macOS, Qt has not finished setting up the draw framebuffer here.
+        # Compile and link now without validating against incomplete GL state.
+        validate_program = sys.platform != "darwin"
+
         self.shader = compileProgram(
             compileShader(
                 VERTEX_SHADER,
@@ -668,6 +673,7 @@ class OpenGLViewport(QOpenGLWidget):
                 FRAGMENT_SHADER,
                 GL_FRAGMENT_SHADER
             ),
+            validate=validate_program,
         )
         
         self.axisShader = compileProgram(
@@ -679,6 +685,7 @@ class OpenGLViewport(QOpenGLWidget):
                 AXIS_FRAGMENT_SHADER,
                 GL_FRAGMENT_SHADER
             ),
+            validate=validate_program,
         )
 
         self.model_location = (
@@ -763,6 +770,7 @@ class OpenGLViewport(QOpenGLWidget):
         self.debugRayShader = compileProgram(
             compileShader(DEBUG_RAY_VERTEX_SHADER, GL_VERTEX_SHADER),
             compileShader(DEBUG_RAY_FRAGMENT_SHADER, GL_FRAGMENT_SHADER),
+            validate=validate_program,
         )
         if self.debug_ray_vao is None:
             self.debug_ray_vao = glGenVertexArrays(1)
@@ -771,6 +779,7 @@ class OpenGLViewport(QOpenGLWidget):
         self.gizmoShader = compileProgram(
             compileShader(GIZMO_VERTEX_SHADER, GL_VERTEX_SHADER),
             compileShader(GIZMO_FRAGMENT_SHADER, GL_FRAGMENT_SHADER),
+            validate=validate_program,
         )
         if self.gizmo_vao is None:
             self.gizmo_vao = glGenVertexArrays(1)
