@@ -50,7 +50,9 @@ class TemporaryParts:
             pathlib.Path or None: Directory path, or None before allocation or after
             cleanup.
         """
-        return Path(self._directory.name) if self._directory else None
+        # Match the resolved keys used by contains() and release(), even when
+        # the system temp path uses an alias or a Windows short name.
+        return Path(self._directory.name).resolve() if self._directory else None
 
     def create(self, source):
         """Copy source bytes into a uniquely named temporary .simuOPart and register its
