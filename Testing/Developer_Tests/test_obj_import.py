@@ -103,12 +103,12 @@ class ObjImportTests(unittest.TestCase):
             self.assertEqual(dialog.call_count, 2)
         self.assertFalse(temporary.exists())
         self.assertEqual(part.read_text(), OBJ)
-        self.assertEqual(self.window.scene.objects[0].meshPath, part)
+        self.assertEqual(self.window.scene.objects[0].meshPath, part.resolve())
         self.assertEqual(self.window.temporaryPartsList.count(), 0)
         stored = json.loads(scene.read_text())
         self.assertEqual(stored['objects'][0]['meshPath'], 'saved part.simuOPart')
         self.window.loadFile(scene, uploadToGPU=False)
-        self.assertEqual(self.window.scene.objects[0].meshPath, part)
+        self.assertEqual(self.window.scene.objects[0].meshPath, part.resolve())
         with patch('simuO.QFileDialog.getSaveFileName') as dialog:
             self.assertTrue(self.window.saveFile())
             dialog.assert_not_called()
@@ -153,7 +153,7 @@ class ObjImportTests(unittest.TestCase):
         with patch('simuO.QFileDialog.getSaveFileName', return_value=(str(target), '')) as dialog:
             self.assertTrue(self.window.saveFile(destination=self.root / 'scene.simuO'))
             dialog.assert_called_once()
-        self.assertEqual([obj.meshPath for obj in self.window.scene.objects], [target, target])
+        self.assertEqual([obj.meshPath for obj in self.window.scene.objects], [target.resolve(), target.resolve()])
 
     def test_close_cancel_preserves_parts_and_discard_cleans_directory(self):
         self.import_obj()

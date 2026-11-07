@@ -62,7 +62,7 @@ def main():
                 assert data['objects'][0]['meshPath'] == part.name
                 window.loadFile(scene)
                 assert len(window.viewport.renderObjects) == 1
-                assert window.scene.objects[0].meshPath == part
+                assert window.scene.objects[0].meshPath == part.resolve()
                 assert not window.viewport.grabFramebuffer().isNull()
                 print('PASS permanent part save, relative scene reference and GPU reload', flush=True)
                 passed.append(True)
