@@ -28,42 +28,17 @@ class InteractionOverlay(QWidget):
         gizmo = self.viewport.gizmo()
         active = self.viewport.drag.handle.key if self.viewport.drag is not None else self.viewport.hover_handle
         if gizmo is not None:
-            # Planes sit behind the axis handles; the center control is drawn last.
-            handles = sorted(gizmo.handles, key=lambda handle: 0 if handle.kind == 'plane' else 2 if handle.kind == 'center' else 1)
-            for handle in handles:
+            for handle in gizmo.handles:
                 color = QColor('#f5db7c' if handle.key == active else handle.color)
                 painter.setPen(QPen(color, 3 if handle.key == active else 2))
-                painter.setBrush(Qt.BrushStyle.NoBrush)
-                points = handle.points
-                if handle.kind == 'plane':
-                    fill = QColor(color)
-                    fill.setAlpha(95 if handle.key == active else 45)
-                    painter.setBrush(fill)
-                    painter.drawPolygon(polygon(points))
-                elif handle.kind == 'ring':
-                    painter.drawPolyline(polygon(points))
-                elif handle.kind == 'axis':
-                    a, b = points
-                    painter.drawLine(QPointF(*a), QPointF(*b))
-                    if gizmo.tool == 'scale':
-                        painter.setBrush(color)
-                        painter.drawRect(QRectF(float(b[0]-4), float(b[1]-4), 8, 8))
-                    else:
-                        angle = math.atan2(*(b-a)[::-1])
-                        sides = [(b[0]-10*math.cos(angle+offset), b[1]-10*math.sin(angle+offset)) for offset in (-.45, .45)]
-                        painter.setBrush(color)
-                        painter.drawPolygon(polygon([b, *sides]))
-                    label = b+(b-a)/max(1., math.hypot(*(b-a)))*11
-                    painter.drawText(QPointF(float(label[0]-4), float(label[1]+4)), 'XYZ'[handle.axis])
-                else:
-                    x, y = points[0]
-                    if handle.kind == 'center' and gizmo.tool == 'scale':
-                        painter.drawRect(QRectF(float(x-5), float(y-5), 10, 10))
-                    else:
-                        painter.setBrush(QColor('#252a32'))
-                        painter.drawEllipse(QPointF(float(x), float(y)), 5, 5)
-                    if handle.kind == 'depth':
-                        painter.drawText(QPointF(float(x+8), float(y+4)), 'XYZ'[handle.axis])
+                a, b = handle.points
+                painter.drawLine(QPointF(*a), QPointF(*b))
+                angle = math.atan2(*(b-a)[::-1])
+                sides = [(b[0]-10*math.cos(angle+offset), b[1]-10*math.sin(angle+offset)) for offset in (-.45, .45)]
+                painter.setBrush(color)
+                painter.drawPolygon(polygon([b, *sides]))
+                label = b+(b-a)/math.hypot(*(b-a))*11
+                painter.drawText(QPointF(float(label[0]-4), float(label[1]+4)), handle.key.upper())
         rect = self.viewport.box_rect()
         if rect is not None:
             painter.setPen(QPen(QColor('#79baff'), 1, Qt.PenStyle.DashLine))

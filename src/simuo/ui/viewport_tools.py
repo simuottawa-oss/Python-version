@@ -104,14 +104,15 @@ def create_viewport_tools(viewport, state, visibility_action):
     actions = {}
     descriptions = {
         "select": "Click an object to select it, or drag a rectangle to select several.\nShift-drag adds to selection. Command/Ctrl toggles objects. Select through includes objects behind others.",
-        "move": "Drag a colored arrow to move along one axis.\nDrag a small tile to move in a plane, or the center circle to move across the view.",
-        "rotate": "Drag a colored ring to turn the selection around that axis.",
-        "scale": "Drag an axis handle to resize along each object’s own axes.\nDrag the center to resize uniformly.",
+        "move": "Select one object and drag a colored arrow along a scene axis.\nEscape or right-click cancels the drag.",
+        "rotate": "Viewport rotation is unavailable. Use Rotation in Properties.",
+        "scale": "Viewport scaling is unavailable. Use Scale in Properties.",
     }
     for tool, title in TOOL_TITLES.items():
         action = QAction(tool_icon(tool), title, group)
         action.setCheckable(True)
-        action.setToolTip(descriptions[tool] + ("\nShift: fine adjustment. Escape/right-click: cancel." if tool != "select" else ""))
+        action.setToolTip(descriptions[tool])
+        action.setEnabled(tool in ("select", "move"))
         action.toggled.connect(lambda checked, tool=tool: state.set_tool(tool) if checked else None)
         toolbar.add_tool(action)
         actions[tool] = action

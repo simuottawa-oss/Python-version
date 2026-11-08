@@ -35,6 +35,10 @@ has a separate 3D preview for its editable feature model.
 
 ## Launch options
 
+The launchers `Testing/Tools/run.sh` and `Testing/Tools/run.bat` find the
+project's Python environment and run `src/main.py`. You can also double-click
+`run.bat` on Windows.
+
 Pass `--new` to start with an empty scene, `--part-editor` to open the Part
 Editor, or a path to a `.simuO` scene or `.simuOPart` file. Both `src/main.py`
 and the launchers accept these arguments. Set `SIMUO_PYTHON` to have a launcher

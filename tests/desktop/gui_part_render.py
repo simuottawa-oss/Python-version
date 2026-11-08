@@ -64,8 +64,15 @@ def main():
                 hierarchy = window.panel_manager.docks["object_hierarchy"]
                 assert hierarchy.widget().state.selected_object is obj
                 window.toolActions["move"].trigger()
-                start = QPoint(round(center[0]), round(center[1]))
-                end = start + QPoint(30, 0)
+                assert all(not window.toolActions[tool].isEnabled() for tool in ("rotate", "scale"))
+                options = viewport.tool_context
+                for control in (options.orientation_input, options.pivot_input, options.snap_button):
+                    assert control.isVisible() and not control.isEnabled()
+                handle = next(handle for handle in viewport.gizmo().handles if handle.key == "x")
+                a, b = handle.points
+                start = QPoint(round(b[0]), round(b[1]))
+                delta = (b - a) * 0.5
+                end = start + QPoint(round(delta[0]), round(delta[1]))
                 position = list(obj.position)
                 QTest.mousePress(viewport, Qt.LeftButton, pos=start)
                 QTest.mouseMove(viewport, end)

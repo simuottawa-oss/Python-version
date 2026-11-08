@@ -28,6 +28,8 @@ class TransformSpinBox(QDoubleSpinBox):
         super().__init__()
         self.mixed = False
         self.typed = False
+        self.setFrame(False)
+        self.lineEdit().setStyleSheet("color: #eeeeee; background: transparent; border: none; padding: 0;")
         self.lineEdit().textEdited.connect(self._typed)
 
     def _typed(self, text):
@@ -153,14 +155,12 @@ class PropertiesPanel(QWidget):
             for axis, axis_name in enumerate(("X", "Y", "Z")):
                 field = TransformSpinBox()
                 field.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-                field.setProperty("axis", axis_name)
                 field.setRange(-1_000_000.0, 1_000_000.0)
                 field.setDecimals(3)
                 field.setSingleStep(1.0 if attribute == "rotation" else 0.1)
                 field.setKeyboardTracking(False)
                 field.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
                 field.setPrefix(f"{axis_name} ")
-                field.setMinimumWidth(40)
                 field.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
                 field.setAccessibleName(f"{title} {axis_name}")
                 field.setToolTip(f"{title} {axis_name}" + (" (degrees)" if attribute == "rotation" else ""))
@@ -172,7 +172,17 @@ class PropertiesPanel(QWidget):
                 field.editingFinished.connect(
                     lambda field=field, a=attribute, i=axis: self._commit_mixed(field, a, i)
                 )
-                rows.addWidget(field, row, axis + 1)
+                # A stylesheet border on a buttonless spin box can collapse
+                # its text area. Draw the border on its container instead.
+                frame = QWidget()
+                frame.setObjectName("transformField")
+                frame.setProperty("axis", axis_name)
+                frame.setMinimumWidth(40)
+                frame.setMinimumHeight(26)
+                frame_layout = QHBoxLayout(frame)
+                frame_layout.setContentsMargins(8, 3, 4, 3)
+                frame_layout.addWidget(field)
+                rows.addWidget(frame, row, axis + 1)
                 inputs.append(field)
             self.transform_inputs[attribute] = inputs
             reset = QPushButton("↺")

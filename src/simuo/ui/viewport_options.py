@@ -86,27 +86,22 @@ class ToolOptionsBar(QFrame):
         orientation.setAccessibleName('Handle directions')
         orientation.addItem('Scene axes', 'world')
         orientation.addItem('Object axes', 'local')
-        orientation.setToolTip('Handle directions\nScene axes (World): fixed directions in the scene.\nObject axes (Local): follow the last selected object’s rotation.\nScale always uses object axes.')
-        for index, description in enumerate(('Fixed scene directions, even when an object is rotated (World).',
-                                              'Directions follow the last selected object’s rotation (Local).')):
-            orientation.setItemData(index, description, Qt.ItemDataRole.ToolTipRole)
-        orientation.currentIndexChanged.connect(lambda index: state.set_tool_options(orientation=orientation.itemData(index)))
+        orientation.setToolTip('Move currently uses scene axes.')
+        orientation.setEnabled(False)
         self._controls.append(orientation)
         self.pivot_input = pivot = ToolOptionCombo(self)
         pivot.setAccessibleName('Center for rotation and scaling')
         pivot.addItem('Selection center', 'median')
         pivot.addItem('Last selected', 'active')
-        pivot.setToolTip('Center for rotation and scaling\nSelection center (Median): the average position of selected objects.\nLast selected (Active): the position of the last selected editable object.')
-        for index, description in enumerate(('Rotate and scale around the average position of selected objects (Median).',
-                                              'Rotate and scale around the last selected object’s position (Active).')):
-            pivot.setItemData(index, description, Qt.ItemDataRole.ToolTipRole)
-        pivot.currentIndexChanged.connect(lambda index: state.set_tool_options(pivot=pivot.itemData(index)))
+        pivot.setToolTip('Pivot options are unavailable.')
+        pivot.setEnabled(False)
         self._controls.append(pivot)
         self.snap_button = snap = QToolButton(self)
         snap.setText('Snap')
         snap.setCheckable(True)
         snap.setFixedHeight(26)
-        snap.toggled.connect(lambda checked: state.set_tool_options(snap=checked))
+        snap.setToolTip('Viewport transform snapping is unavailable.')
+        snap.setEnabled(False)
         self._controls.append(snap)
         self.xray_button = through = QToolButton(self)
         through.setText('Select through')
@@ -162,18 +157,9 @@ class ToolOptionsBar(QFrame):
     def sync(self, *args):
         tool, options = self._state.active_tool, self._state.tool_options
         orientation, pivot, snap, through = self.orientation_input, self.pivot_input, self.snap_button, self.xray_button
-        blockers = [QSignalBlocker(widget) for widget in (orientation, pivot, snap, through)]
+        with QSignalBlocker(through):
+            through.setChecked(options['xray'])
         self.title.setText(TOOL_TITLES[tool])
-        orientation.setVisible(tool in ('move', 'rotate'))
-        pivot.setVisible(tool in ('rotate', 'scale'))
-        snap.setVisible(tool != 'select')
+        for control in (orientation, pivot, snap):
+            control.setVisible(tool == 'move')
         through.setVisible(tool == 'select')
-        orientation.setCurrentIndex(orientation.findData('local' if tool == 'scale' else options['orientation']))
-        orientation.setEnabled(tool != 'scale')
-        pivot.setCurrentIndex(pivot.findData(options['pivot']))
-        snap.setChecked(options['snap'])
-        through.setChecked(options['xray'])
-        del blockers
-        step = {'move': 'Move in steps of 1 unit.', 'rotate': 'Rotate in steps of 15°.',
-                'scale': 'Resize in steps of 0.1× the original size.'}.get(tool, '')
-        snap.setToolTip(f"Snapping {'on' if options['snap'] else 'off'}\n{step}\nHold Shift during a drag for finer adjustment.")

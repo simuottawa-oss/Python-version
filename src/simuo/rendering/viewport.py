@@ -17,7 +17,7 @@ from simuo.rendering.geometry import create_axis_lines
 from simuo.rendering.picking import PickMesh, object_matrix, pick_object
 from simuo.rendering.ray import Ray
 from simuo.rendering.outline import SelectionOutline
-from simuo.rendering.manipulation import Gizmo, Projection, TransformDrag, box_candidates
+from simuo.rendering.manipulation import MoveDrag, MoveGizmo, Projection, box_candidates
 from simuo.rendering.overlays import InteractionOverlay
 from simuo.rendering.selection_buffer import SelectionBuffer
 from simuo.rendering.shaders import (
@@ -84,7 +84,7 @@ class OpenGLViewport(QOpenGLWidget):
         self.selected_object_ids = set()
         self.selected_objects = ()
         self.active_tool = "select"
-        self.tool_options = {"orientation": "world", "pivot": "median", "snap": False, "xray": False}
+        self.tool_options = {"xray": False}
         self.drag = None
         self.hover_handle = None
         self._box_start = self._box_end = None
@@ -178,15 +178,16 @@ class OpenGLViewport(QOpenGLWidget):
         return Projection(self.camera, self.width(), self.height())
 
     def gizmo(self):
-        if self.active_tool == "select":
+        if self.active_tool != "move" or len(self.selected_objects) != 1:
             return None
-        rendered = {item['SceneObject'].identifier for item in self.renderObjects
-                    if item.get('pick_mesh') is not None and len(item['pick_mesh'].triangles)}
-        objects = [obj for obj in self.selected_objects if obj.identifier in rendered
-                   and obj.viewport_visible and not obj.viewport_locked]
-        if not objects:
+        obj = self.selected_objects[0]
+        if not obj.viewport_visible or obj.viewport_locked:
             return None
-        return Gizmo(objects, self.active_tool, self.projection(), self.tool_options['orientation'], self.tool_options['pivot'])
+        for item in self.renderObjects:
+            mesh = item.get('pick_mesh')
+            if item['SceneObject'] is obj and mesh is not None and len(mesh.triangles):
+                return MoveGizmo(obj, self.projection())
+        return None
 
     def box_rect(self):
         if not self._box_dragged or self._box_start is None:
@@ -1028,8 +1029,8 @@ class OpenGLViewport(QOpenGLWidget):
             handle = gizmo.hit(point) if gizmo is not None else None
             modifiers = event.modifiers() & (Qt.ControlModifier | Qt.MetaModifier | Qt.ShiftModifier | Qt.AltModifier)
             if handle is not None and not modifiers:
-                self.drag = TransformDrag(gizmo, handle, point)
-                self.transform_started.emit(tuple(obj.identifier for obj in gizmo.objects), self.active_tool.title() + ' Objects')
+                self.drag = MoveDrag(gizmo, handle, point)
+                self.transform_started.emit((gizmo.mover.scene_object.identifier,), 'Move Object')
                 if self.isVisible():
                     self.grabMouse()
                 self.interaction_overlay.update()
@@ -1083,8 +1084,8 @@ class OpenGLViewport(QOpenGLWidget):
         if event.button() == Qt.LeftButton:
             if self.drag is not None:
                 point = (event.position().x(), event.position().y())
-                if self.drag.feedback or tuple(self.drag.start) != point:
-                    self.transform_previewed.emit(self.drag.updates(point, self.tool_options['snap'], bool(event.modifiers() & Qt.ShiftModifier)))
+                if self.drag.feedback or self.drag.start != point:
+                    self.transform_previewed.emit(self.drag.updates(point))
                 self.drag = None
                 self.transform_finished.emit(True)
                 self.discard_transform()
@@ -1133,7 +1134,7 @@ class OpenGLViewport(QOpenGLWidget):
         """
         point = (event.position().x(), event.position().y())
         if self.drag is not None:
-            self.transform_previewed.emit(self.drag.updates(point, self.tool_options['snap'], bool(event.modifiers() & Qt.ShiftModifier)))
+            self.transform_previewed.emit(self.drag.updates(point))
             self.interaction_overlay.update()
             event.accept()
             return

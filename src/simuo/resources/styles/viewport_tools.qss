@@ -31,3 +31,10 @@ QFrame#toolContext QToolButton {
 }
 QFrame#toolContext QToolButton:hover { background: #445364; }
 QFrame#toolContext QToolButton:checked { background: #315d88; border-color: #6c9dca; }
+
+QFrame#viewportToolRail QToolButton:disabled,
+QFrame#toolContext QToolButton:disabled,
+QFrame#toolContext QComboBox:disabled {
+    color: #929ba7;
+    background: transparent;
+}

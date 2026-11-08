@@ -34,7 +34,7 @@ class EditorState(QObject):
         self._selected_ids = ()
         self.scene_name = "Untitled Scene"
         self.active_tool = "select"
-        self.tool_options = {"orientation": "world", "pivot": "median", "snap": False, "xray": False}
+        self.tool_options = {"xray": False}
         self._transform = None
         self._base_dirty = scene.dirty
         self.undo_stack = QUndoStack(self)
@@ -377,7 +377,7 @@ class EditorState(QObject):
         return True
 
     def set_tool(self, tool):
-        if tool not in ("select", "move", "rotate", "scale"):
+        if tool not in ("select", "move"):
             raise ValueError("Unknown viewport tool")
         if tool != self.active_tool:
             self.cancel_transform()
@@ -386,9 +386,7 @@ class EditorState(QObject):
 
     def set_tool_options(self, **updates):
         options = {**self.tool_options, **updates}
-        if (set(options) != set(self.tool_options) or options["orientation"] not in ("world", "local")
-                or options["pivot"] not in ("median", "active")
-                or not isinstance(options["snap"], bool) or not isinstance(options["xray"], bool)):
+        if set(options) != {"xray"} or not isinstance(options["xray"], bool):
             raise ValueError("Invalid viewport tool options")
         if options != self.tool_options:
             self.cancel_transform()

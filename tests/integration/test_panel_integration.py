@@ -6,6 +6,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from PySide6.QtCore import Qt
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from tests import ROOT
@@ -26,6 +28,30 @@ class PanelIntegrationTests(unittest.TestCase):
             self.window = create_scene_window()
         self.addCleanup(self.window.temporaryParts.cleanup)
         self.addCleanup(self.window.deleteLater)
+
+    def test_transform_fields_display_and_accept_mouse_and_keyboard_edits(self):
+        self.window.loadFile(ROOT / "Assets/SimuOPart.simuO")
+        obj = self.window.scene.objects[0]
+        state = self.window.editor_state
+        state.select(obj.identifier)
+        dock = self.window.panel_manager.docks["properties"]
+        dock.show()
+        self.window.show()
+        self.app.processEvents()
+
+        panel = dock.widget()
+        for attribute, new_value in (("position", 12), ("rotation", 35), ("scale", 2)):
+            with self.subTest(attribute=attribute):
+                field = panel.transform_inputs[attribute][0]
+                editor = field.lineEdit()
+                self.assertTrue(editor.isVisible())
+                self.assertGreater(editor.width(), editor.fontMetrics().horizontalAdvance(field.text()))
+                self.assertEqual(field.value(), round(getattr(obj, attribute)[0], 3))
+                QTest.mouseClick(editor, Qt.MouseButton.LeftButton)
+                field.selectAll()
+                QTest.keyClicks(editor, str(new_value))
+                QTest.keyClick(editor, Qt.Key.Key_Return)
+                self.assertEqual(getattr(obj, attribute)[0], new_value)
 
     def test_upstream_scene_keeps_physics_after_panel_edits(self):
         source = self.folder / "upstream.simuO"

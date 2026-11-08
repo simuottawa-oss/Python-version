@@ -358,8 +358,16 @@ class Mover:
         self.dragging_axis = axis_name
         self._drag_axis_dir = AXES_BY_NAME[axis_name]
         self._drag_anchor = self.world_center()
-        self._drag_start_position = glm.vec3(*self.scene_object.position)
+        self._drag_start_position = list(self.scene_object.position)
         self._drag_t0 = closest_point_on_line_t(self._drag_anchor, self._drag_axis_dir, ray_origin, ray_direction)
+
+    def drag_position(self, ray_origin, ray_direction):
+        """Calculate the next position so callers can preview or apply it."""
+        t = closest_point_on_line_t(self._drag_anchor, self._drag_axis_dir, ray_origin, ray_direction)
+        axis = "xyz".index(self.dragging_axis)
+        position = self._drag_start_position.copy()
+        position[axis] += t - self._drag_t0
+        return position
 
     def update_drag(self, ray_origin, ray_direction):
         """Move the object to follow the mouse along the axis grabbed in begin_drag().
@@ -368,10 +376,7 @@ class Mover:
             ray_origin: Current mouse ray origin.
             ray_direction: Current mouse ray direction.
         """
-        t = closest_point_on_line_t(self._drag_anchor, self._drag_axis_dir, ray_origin, ray_direction)
-        delta = t - self._drag_t0
-        new_position = self._drag_start_position + self._drag_axis_dir * delta
-        self.scene_object.setPosition(new_position.x, new_position.y, new_position.z)
+        self.scene_object.setPosition(*self.drag_position(ray_origin, ray_direction))
 
     def end_drag(self):
         """Stop dragging and clear the temporary drag state."""

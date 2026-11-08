@@ -6,6 +6,8 @@ them in a scene, and preview rigid-body motion.
 [Scene editor](docs/scene-editor.md) · [Part editor](docs/part-editor.md) ·
 [Developer guide](docs/README.md)
 
+Set up your environment once, then use the [Run](#run) section to open the app.
+
 ## Windows setup
 
 Use Windows 10/11 x64 with **Python 3.12 x64** from python.org. Include Tcl/Tk in
@@ -19,10 +21,8 @@ Open PowerShell in the repository:
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip setuptools wheel
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\Testing\Tools\run.bat
 ```
 
-After setup, you can also double-click `Testing/Tools/run.bat`.
 Use a graphics driver with OpenGL 3.3 support.
 
 ## Linux Mint 22 setup
@@ -38,7 +38,6 @@ sudo apt install python3 python3-venv python3-pip python3-tk \
     libxcb-xkb1 libxkbcommon-x11-0 libxi6 libxrender1 build-essential python3-dev
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
-./Testing/Tools/run.sh
 ```
 
 Use an X11 or XWayland session for camera controls and a graphics driver with
@@ -54,7 +53,6 @@ PyBullet, which can take a few minutes to build.
 python3.12 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip setuptools wheel
 CFLAGS="-include stdio.h" .venv/bin/python -m pip install -r requirements.txt
-./Testing/Tools/run.sh
 ```
 
 ## Run

@@ -92,7 +92,7 @@ QPushButton:hover {
     background-color: #505050;
 }
 
-QDoubleSpinBox {
+QDialog QDoubleSpinBox {
     background-color: #222222;
     color: white;
     border: 1px solid #666666;

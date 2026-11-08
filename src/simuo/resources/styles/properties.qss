@@ -16,15 +16,15 @@ QPushButton#sectionToggle {
 QPushButton#sectionToggle:hover { color: white; background: #3a3a3a; }
 QWidget#sectionBody { background: #292929; }
 QLabel { color: #c8c8c8; font-size: 11px; }
-QDoubleSpinBox {
+QWidget#transformField {
     color: #eeeeee; background: #1f1f1f; border: 1px solid #444444;
     border-left: 3px solid #777777; border-radius: 3px;
-    padding: 4px 3px; font-size: 11px; min-height: 17px;
+    font-size: 11px;
 }
-QDoubleSpinBox[axis="X"] { border-left-color: #c35a5a; }
-QDoubleSpinBox[axis="Y"] { border-left-color: #78a85a; }
-QDoubleSpinBox[axis="Z"] { border-left-color: #5b8ec2; }
-QDoubleSpinBox:focus { background: #303b48; border-color: #698db4; }
+QWidget#transformField[axis="X"] { border-left-color: #c35a5a; }
+QWidget#transformField[axis="Y"] { border-left-color: #78a85a; }
+QWidget#transformField[axis="Z"] { border-left-color: #5b8ec2; }
+QWidget#transformField QDoubleSpinBox:focus { background: #303b48; }
 QPushButton#inspectorReset {
     color: #bbbbbb; background: #393939; border: 1px solid #4a4a4a;
     border-radius: 3px; padding: 2px 5px; font-size: 11px;

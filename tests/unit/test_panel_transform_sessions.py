@@ -51,7 +51,7 @@ class TransformSessions(unittest.TestCase):
 
     def test_selection_tool_options_and_external_edits_cancel_preview(self):
         for cancel in (lambda: self.state.select(None), lambda: self.state.set_tool('move'),
-                       lambda: self.state.set_tool_options(snap=True), lambda: self.state.isolate_selected(),
+                       lambda: self.state.set_tool_options(xray=True), lambda: self.state.isolate_selected(),
                        lambda: self.state.set_transform_component(self.objects[0].identifier, 'position', 1, 7)):
             with self.subTest(cancel=cancel):
                 self.setUp()

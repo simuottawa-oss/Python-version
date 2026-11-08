@@ -57,9 +57,9 @@ class ToolInput(unittest.TestCase):
         QApplication.sendEvent(self.viewport, QKeyEvent(QEvent.Type.KeyPress, key, Qt.NoModifier))
 
     def start_move(self):
-        self.state.select_many(obj.identifier for obj in self.objects)
+        self.state.select(self.objects[0].identifier)
         self.state.set_tool('move')
-        handle = next(h for h in self.viewport.gizmo().handles if h.key == '0')
+        handle = next(h for h in self.viewport.gizmo().handles if h.key == 'x')
         start = handle.points[-1]
         self.mouse(QEvent.Type.MouseButtonPress, start)
         self.mouse(QEvent.Type.MouseMove, start + [50, 10])
@@ -89,7 +89,7 @@ class ToolInput(unittest.TestCase):
         for cancel in (lambda: self.key(Qt.Key_Escape),
                        lambda: self.mouse(QEvent.Type.MouseButtonPress, (200, 200), button=Qt.RightButton),
                        lambda: QApplication.sendEvent(self.viewport, QFocusEvent(QEvent.Type.FocusOut)),
-                       lambda: self.state.set_tool('rotate')):
+                       lambda: self.state.set_tool('select')):
             with self.subTest(cancel=cancel):
                 escapes = []
                 self.viewport.escape_requested.connect(lambda: escapes.append(True))
@@ -136,6 +136,12 @@ class ToolInput(unittest.TestCase):
         self.key(Qt.Key_Escape)
         self.assertIsNone(self.viewport.box_rect())
         self.assertEqual(self.state.selected_objects, (self.objects[1],))
+
+    def test_move_has_no_handles_for_multiple_selected_objects(self):
+        self.state.set_tool('move')
+        self.state.select_many(obj.identifier for obj in self.objects)
+        self.assertIsNone(self.viewport.gizmo())
+        self.assertEqual(self.state.selected_objects, tuple(self.objects))
 
     def test_modified_click_bypasses_gizmo_and_keeps_multi_selection(self):
         self.state.select(self.objects[0].identifier)

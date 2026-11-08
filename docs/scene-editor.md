@@ -123,29 +123,15 @@
 - **Select:** click objects normally, or drag a rectangle (box selection). A plain box replaces
   selection, Shift adds, and Cmd/Ctrl toggles. By default only visible mesh surfaces
   count. Enable **Select through** (X-Ray) in the options row to select through other objects.
-- **Move:** drag a colored axis arrow, a small plane tile, or the center circle for
-  movement in the screen plane. An axis facing the camera has a small colored
-  depth handle. Drag vertically to move along it.
-- **Rotate:** drag a colored ring around its axis. **Scale:** drag an axis square
-  for local-axis scaling, or the center square for uniform scaling. Scaling
-  multiplies existing scales and preserves mirrored objects. It stops before zero.
-- **Scene axes** (World) keeps the handles aligned to fixed scene directions.
-  **Object axes** (Local) follows the last selected editable object's rotation.
-  Scale always uses object axes.
-- **Selection center** (Median) rotates/scales around the average position of the
-  selected objects. **Last selected** (Active) instead uses the last selected
-  editable object's position. These refer to object origins, rather than mesh bounds.
-- Hover over a tool or option to read its explanation. The center selector appears
-  for Rotate and Scale. The axes selector appears for Move and Rotate, since Scale
-  always follows object axes. Options wrap onto another row in a narrow viewport.
-- Snapping uses relative increments: **1 unit** for moving, **15°** for rotating,
-  and **0.1** for scaling. Hold **Shift** during a transform for finer adjustment.
-- Multi-object transforms preserve offsets when moving and use the chosen pivot
-  when rotating/scaling. Hidden or selection-locked objects are excluded.
-- Properties follows live previews. Release to commit one undo step for the whole
-  drag. **Escape** or **right-click** cancels. Changing tool/selection, losing focus,
-  or resizing also cancels an unfinished transform. Tool options and selection do
-  not create scene edits. Cmd/Ctrl-click still toggles objects in every tool.
+- **Move** works with one visible, unlocked object. Drag a colored arrow along
+  its fixed scene axis. Orbit the camera if an axis points toward the camera
+  and its arrow is out of view.
+- **Rotate**, **Scale**, and the axis, pivot, and snap options stay visible as
+  disabled controls. Use **Properties** to edit position, rotation, and scale.
+- Properties follows the move preview. Release to commit one undo step.
+  **Escape** or **right-click** cancels. Changing tool or selection, losing
+  focus, or resizing also cancels an unfinished drag. Cmd/Ctrl-click still
+  toggles objects in either tool.
 - **View → Frame Selected** (`F`) and **Frame Scene** (`Shift+F`) remain available.
   Camera controls are unchanged and pause during selection/transform drags.
 
