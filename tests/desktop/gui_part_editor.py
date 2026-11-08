@@ -10,23 +10,29 @@ from unittest.mock import patch
 
 
 def startup_check(action):
-    import simuo.app as main
-    original = main.showStartMenu
-    sample = ROOT/"Assets/sketch_plate.simuOPart"
-    def automate(*args,**kwargs):
-        menu = original(*args,**kwargs)
-        def choose():
-            if action=="new_part":
-                menu._new_part()
-            else:
-                with patch("simuo.ui.startup.filedialog.askopenfilename",return_value=str(sample)):
-                    menu._open_part()
-        menu.after(350,choose)
-        return menu
-    with patch("simuo.app.showStartMenu",side_effect=automate):
-        result = main.startup_menu()
-    assert result==(action,str(sample) if action=="open_part" else None),result
-    print(f"PASS startup {action} routing",flush=True)
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import QPushButton
+    from simuo import app
+    from simuo.ui.startup_dialog import StartupDialog
+
+    path = str(ROOT / "Assets/sketch_plate.simuOPart") if action == "open_part" else None
+    label = "Open Part…" if path else "New Part"
+
+    def automate():
+        chooser = StartupDialog()
+        button = next(button for button in chooser.findChildren(QPushButton) if button.text() == label)
+        QTimer.singleShot(350, button.click)
+        return chooser
+
+    with (
+        patch.object(sys, "argv", ["src/main.py"]),
+        patch("simuo.ui.startup_dialog.StartupDialog", side_effect=automate),
+        patch("simuo.ui.startup_dialog.QFileDialog.getOpenFileName", return_value=(path, "")),
+        patch("simuo.ui.parts.part_editor.run_part_editor", return_value=0) as launch,
+    ):
+        assert app.main() == 0
+        launch.assert_called_once_with(path)
+    print(f"PASS startup {action} routing", flush=True)
 
 
 def main():

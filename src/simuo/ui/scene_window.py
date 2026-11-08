@@ -27,7 +27,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from tkinter import filedialog
 from simuo.project.scene import Scene, SceneObject
 from simuo.editor.state import EditorState
 from simuo.project.editor_metadata import read_groups, read_object_editor, write_group
@@ -109,7 +108,7 @@ class SimuOMainWindow(QMainWindow):
         self.editor_state.object_changed.connect(self.onObjectChanged)
         self.editor_state.objects_changed.connect(self.onObjectsChanged)
         self.editor_state.dirty_changed.connect(self.updateWindowTitle)
-        self.editor_state.view_changed.connect(self.viewport.update)
+        self.editor_state.view_changed.connect(self.viewport.request_frame)
         self.editor_state.view_changed.connect(self.updateEditActions)
         self.editor_state.selection_set_changed.connect(self.updateEditActions)
         QApplication.instance().focusChanged.connect(self.updateEditActions)
@@ -137,7 +136,7 @@ class SimuOMainWindow(QMainWindow):
 
     def onObjectChanged(self, obj):
         self.updateWindowTitle()
-        self.viewport.update()
+        self.viewport.request_frame()
 
     def onObjectsChanged(self):
         self.viewport.sync_scene_objects()

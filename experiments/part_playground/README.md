@@ -12,8 +12,7 @@ From the repository root:
 python3 experiments/part_playground/viewer.py
 ```
 
-Requires Python 3.10+ and the standard-library Tk bindings (`python3-tk` on Linux,
-already used by SimuO's startup menu). No pip install, OpenGL, Qt, network,
+Requires Python 3.10+ and the standard-library Tk bindings (`python3-tk` on Linux). No pip install, OpenGL, Qt, network,
 or running SimuO instance is needed. A desktop display is needed for the window.
 If Python reports `No module named tkinter`, use a Python installation with Tk.
 

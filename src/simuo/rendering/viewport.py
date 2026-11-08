@@ -132,19 +132,31 @@ class OpenGLViewport(QOpenGLWidget):
             time.perf_counter()
         )
 
-        # Repaint timer used to drive continuous updates.
+        # The timer drives keyboard navigation without repainting an idle scene.
         self.timer = QTimer(
             self
         )
 
         self.timer.timeout.connect(
-            self.update
+            self._tick_camera
         )
 
-        # ~120 repaint requests/sec.
         self.timer.start(
             8
         )
+
+    def _tick_camera(self):
+        now = time.perf_counter()
+        delta_time = min(now - self.last_time, 0.1)
+        self.last_time = now
+        if self.keys and self.drag is None and self._box_start is None:
+            self.update_camera(delta_time)
+            self.request_frame()
+
+    def request_frame(self):
+        self.update()
+        if self.active_tool == "move":
+            self.interaction_overlay.update()
 
     # ---------------------------------------------------------
     # OPENGL SETUP
@@ -161,7 +173,7 @@ class OpenGLViewport(QOpenGLWidget):
         self.selected_objects = tuple(objects)
         self.selected_object_ids = {obj.identifier for obj in objects}
         self.selected_object_id = objects[-1].identifier if objects else None
-        self.update()
+        self.request_frame()
 
     def set_tool(self, tool):
         self.cancel_interaction()
@@ -295,7 +307,7 @@ class OpenGLViewport(QOpenGLWidget):
         self.camera.position = center - self.camera.front * distance
         self.camera.far_plane = max(1000.0, (distance + max(depths)) * 1.2)
         self.keys.clear()
-        self.update()
+        self.request_frame()
         return True
 
     def frameObject(self, obj):
@@ -319,7 +331,7 @@ class OpenGLViewport(QOpenGLWidget):
         for key, obj in current.items():
             if key not in rendered:
                 self.addNewObject(obj)
-        self.update()
+        self.request_frame()
 
     @Slot()
     def cleanup_outline(self):
@@ -613,35 +625,9 @@ class OpenGLViewport(QOpenGLWidget):
     def paintGL(self):
         """Render one frame of the 3D scene.
 
-        This method updates the camera, clears the framebuffer, calculates the
-        projection and view matrices, and draws both the axis helper and scene
-        objects.
+        Clear the framebuffer, calculate the projection and view matrices,
+        and draw the axis helper and scene objects.
         """
-        current_time = (
-            time.perf_counter()
-        )
-
-        # Update the frame timer state before camera motion is applied.
-        delta_time = (
-            current_time
-            - self.last_time
-        )
-
-        # Store the current frame time for the next update.
-        self.last_time = (
-            current_time
-        )
-
-        delta_time = min(
-            delta_time,
-            0.1
-        )
-
-        self.update_camera(
-            delta_time
-        )
-        self.interaction_overlay.update()
-
         # Qt paints child controls/overlays with its own GL state between frames.
         glEnable(GL_DEPTH_TEST)
         glDepthMask(GL_TRUE)
@@ -1184,6 +1170,7 @@ class OpenGLViewport(QOpenGLWidget):
             dx,
             dy
         )
+        self.request_frame()
 
         # Mark the next recentering move event as synthetic.
         self.ignore_center_event = True

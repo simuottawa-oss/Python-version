@@ -1,0 +1,56 @@
+QDialog#startupDialog {
+    background: #242224;
+}
+QFrame#startupCard {
+    background: #2d292c;
+    border: 1px solid #443a40;
+    border-radius: 8px;
+}
+QLabel#startupTitle {
+    color: #f2edf0;
+    font-size: 31px;
+    font-weight: 700;
+}
+QLabel#startupSubtitle {
+    color: #c4b7be;
+    font-size: 14px;
+}
+QLabel#startupHeading {
+    color: #eee7eb;
+    font-size: 15px;
+    font-weight: 600;
+}
+QLabel#startupDescription {
+    color: #c4b7be;
+    font-size: 13px;
+}
+QPushButton {
+    color: #eee7eb;
+    background: #373136;
+    border: 1px solid #564850;
+    border-radius: 5px;
+    padding: 0 12px;
+    font-size: 13px;
+    font-weight: 600;
+}
+QPushButton:hover {
+    background: #463941;
+    border-color: #765963;
+}
+QPushButton:pressed {
+    background: #30282e;
+}
+QPushButton#startupPrimary {
+    background: #623d49;
+    border-color: #9b6b7a;
+}
+QPushButton#startupPrimary:hover {
+    background: #754b57;
+    border-color: #b68996;
+}
+QPushButton#startupPrimary:pressed {
+    background: #52343d;
+}
+QPushButton:focus, QPushButton#startupPrimary:focus {
+    border-color: #d6a4b2;
+}

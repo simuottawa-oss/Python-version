@@ -10,8 +10,7 @@ Set up your environment once, then use the [Run](#run) section to open the app.
 
 ## Windows setup
 
-Use Windows 10/11 x64 with **Python 3.12 x64** from python.org. Include Tcl/Tk in
-the installer. Install **Visual Studio Build Tools 2022** with **Desktop
+Use Windows 10/11 x64 with **Python 3.12 x64** from python.org. Install **Visual Studio Build Tools 2022** with **Desktop
 development with C++**, including MSVC x64 and the Windows SDK. PyBullet may
 take several minutes to build from source.
 
@@ -31,7 +30,7 @@ Run these commands from the repository:
 
 ```bash
 sudo apt update
-sudo apt install python3 python3-venv python3-pip python3-tk \
+sudo apt install python3 python3-venv python3-pip \
     libgl1 libegl1 libglx-mesa0 libglib2.0-0 libfontconfig1 libdbus-1-3 \
     libx11-xcb1 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
     libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 \
@@ -45,7 +44,7 @@ OpenGL 3.3 support.
 
 ## macOS setup
 
-Use **Python 3.12** with Tcl/Tk and Xcode Command Line Tools
+Use **Python 3.12** and Xcode Command Line Tools
 (`xcode-select --install`). The install command includes a compiler flag for
 PyBullet, which can take a few minutes to build.
 

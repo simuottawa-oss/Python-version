@@ -1,41 +1,45 @@
-"""Keep the macOS editor separate from the Tk startup chooser."""
+"""Verify the Qt chooser's buttons and file selection."""
 
-from pathlib import Path
-import sys
 import unittest
 from unittest.mock import patch
 
-from simuo import app
+from PySide6.QtWidgets import QApplication, QDialog, QPushButton
+
+from simuo.ui.startup_dialog import StartupDialog
 
 
 class StartupHandoffTests(unittest.TestCase):
-    def test_macos_passes_each_menu_choice_to_a_fresh_editor_process(self):
-        choices = (
-            (("new", None), ["--new"]),
-            (("import", Path("my scene.simuO")), ["--", "my scene.simuO"]),
-            (("new_part", None), ["--part-editor"]),
-            (("open_part", Path("my part.simuOPart")), ["--part-editor", "--", "my part.simuOPart"]),
-        )
-        with patch.object(sys, "platform", "darwin"), patch.object(sys, "argv", ["src/main.py"]):
-            for frozen in (False, True):
-                for choice, arguments in choices:
-                    with (
-                        self.subTest(choice=choice, frozen=frozen),
-                        patch.object(sys, "frozen", frozen, create=True),
-                        patch.object(app, "startup_menu", return_value=choice),
-                        patch.object(app.subprocess, "run") as launch,
-                    ):
-                        launch.return_value.returncode = 7
-                        self.assertEqual(app.main(), 7)
-                        entry = [] if frozen else ["src/main.py"]
-                        launch.assert_called_once_with([sys.executable, *entry, *arguments], check=False)
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
 
-    def test_cancelling_menu_does_not_launch_an_editor(self):
-        with (
-            patch.object(sys, "platform", "darwin"),
-            patch.object(sys, "argv", ["src/main.py"]),
-            patch.object(app, "startup_menu", return_value=(None, None)),
-            patch.object(app.subprocess, "run") as launch,
+    def setUp(self):
+        self.dialog = StartupDialog()
+        self.addCleanup(self.dialog.close)
+        self.buttons = {button.text(): button for button in self.dialog.findChildren(QPushButton)}
+
+    def test_new_scene_and_part_choose_the_matching_editor(self):
+        for label, action in (("New Scene", "new"), ("New Part", "new_part")):
+            with self.subTest(label=label):
+                self.buttons[label].click()
+                self.assertEqual(self.dialog.result(), QDialog.DialogCode.Accepted)
+                self.assertEqual(self.dialog.choice, (action, None))
+
+    def test_import_scene_and_open_part_preserve_the_selected_path(self):
+        for label, action, path in (
+            ("Import Scene", "import", "my scene.simuO"),
+            ("Open Part…", "open_part", "my part.simuOPart"),
         ):
-            self.assertIsNone(app.main())
-            launch.assert_not_called()
+            with self.subTest(label=label), patch(
+                "simuo.ui.startup_dialog.QFileDialog.getOpenFileName", return_value=(path, "")
+            ):
+                self.buttons[label].click()
+                self.assertEqual(self.dialog.result(), QDialog.DialogCode.Accepted)
+                self.assertEqual(self.dialog.choice, (action, path))
+
+    def test_cancelling_file_picker_leaves_chooser_open(self):
+        with patch("simuo.ui.startup_dialog.QFileDialog.getOpenFileName", return_value=("", "")):
+            self.dialog.show()
+            self.buttons["Import Scene"].click()
+        self.assertTrue(self.dialog.isVisible())
+        self.assertEqual(self.dialog.choice, (None, None))

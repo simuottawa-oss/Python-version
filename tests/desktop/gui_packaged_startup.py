@@ -1,4 +1,4 @@
-"""Linux desktop regression check for the packaged Tk startup screen and logo.
+"""Linux desktop regression check for the packaged Qt startup screen and logo.
 
 Requires wmctrl and an X11/XWayland desktop. Run from the repository root:
 .venv/bin/python -m tests.desktop.gui_packaged_startup dist/SimuO

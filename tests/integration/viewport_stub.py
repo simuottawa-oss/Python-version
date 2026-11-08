@@ -24,6 +24,9 @@ class ViewportStub(QWidget):
     def layout_tools(self):
         pass
 
+    def request_frame(self):
+        self.update()
+
     def set_selected_objects(self, objects):
         pass
 
