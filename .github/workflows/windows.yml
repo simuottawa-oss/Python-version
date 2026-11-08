@@ -39,9 +39,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           .venv\Scripts\python.exe -m pip check
       - name: Editor, file safety, portability and physics tests
-        run: .venv\Scripts\python.exe -m unittest discover -s Testing/Developer_Tests -v
+        run: .venv\Scripts\python.exe -m unittest discover -s tests -t . -v
       - name: Independent lab tests
-        run: .venv\Scripts\python.exe -m unittest discover -s Testing/Part_Playground -v
+        run: .venv\Scripts\python.exe -m unittest discover -s experiments/part_playground -v
       - name: Launcher from another working directory
         run: |
           $launcher = Join-Path $PWD 'Testing/Tools/run.bat'

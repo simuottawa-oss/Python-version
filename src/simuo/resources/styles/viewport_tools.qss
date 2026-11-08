@@ -1,0 +1,40 @@
+QFrame#viewportToolRail {
+    background: #292629;
+    border: 1px solid #443a40;
+    border-radius: 5px;
+}
+QFrame#viewportToolRail QToolButton {
+    color: #d5dde7;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    padding: 6px;
+    text-align: left;
+}
+QFrame#viewportToolRail QToolButton:hover { background: #393035; }
+QFrame#viewportToolRail QToolButton:checked { background: #52343d; border-color: #ae8490; }
+QFrame#viewportToolRail QToolButton:pressed { background: #49323a; }
+QFrame#viewportToolRail QToolButton#toolLabelsToggle:checked { background: transparent; border-color: transparent; }
+QFrame#viewportToolRail QToolButton#toolLabelsToggle:hover { background: #393035; }
+QFrame#toolDivider { background: #4b3d44; border: none; }
+QFrame#toolContext { background: #292629; border: 1px solid #443a40; border-radius: 4px; }
+QLabel#activeToolLabel { color: #d5dde7; font-size: 11px; padding: 0 3px; }
+QFrame#toolContext QComboBox { font-size: 11px; }
+QFrame#toolContext QComboBox QAbstractItemView {
+    color: #e1e8f1; background: #302a2d; border: 1px solid #55434b;
+    selection-background-color: #52343d; outline: none; padding: 3px;
+}
+QFrame#toolContext QComboBox QAbstractItemView::item { min-height: 24px; padding: 0 6px; }
+QFrame#toolContext QToolButton {
+    color: #d5dde7; border: 1px solid #55434b; border-radius: 3px;
+    background: #393035; padding: 3px 7px; font-size: 11px;
+}
+QFrame#toolContext QToolButton:hover { background: #393035; }
+QFrame#toolContext QToolButton:checked { background: #52343d; border-color: #ae8490; }
+
+QFrame#viewportToolRail QToolButton:disabled,
+QFrame#toolContext QToolButton:disabled,
+QFrame#toolContext QComboBox:disabled {
+    color: #929ba7;
+    background: transparent;
+}

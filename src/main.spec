@@ -10,7 +10,8 @@ a = Analysis(
     pathex=[str(project_root / 'src')],
     binaries=[],
     datas=[(str(project_root / 'Images'), 'Images'),
-           (str(project_root / 'Assets'), 'Assets')] + collect_data_files('customtkinter'),
+           (str(project_root / 'Assets'), 'Assets'),
+           (str(project_root / 'src/simuo/resources/styles'), 'simuo/resources/styles')] + collect_data_files('customtkinter'),
     # Pillow's compiled Tk bridge imports its locator dynamically.
     hiddenimports=['PIL._imagingtk', 'PIL._tkinter_finder'],
     hookspath=[],
