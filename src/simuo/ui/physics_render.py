@@ -229,12 +229,14 @@ class PhysicsRenderWindow(QMainWindow):
         Returns:
             None. Replaces the status label text.
         """
-        dynamic = sum(mass > 0 for mass in self.world.masses)
-        label = f"{'RUNNING' if self.running else 'PAUSED'} · {self.world.time:.3f} s · {dynamic} dynamic / {len(self.world.bodies)-dynamic} static bodies"
+        objects = self.world.scene.objects
+        counts = " / ".join(f"{sum(obj.body_type == mode for obj in objects)} {mode}"
+                            for mode in ("dynamic", "kinematic", "static"))
+        label = f"{'RUNNING' if self.running else 'PAUSED'} · {self.world.time:.3f} s · {counts}"
         if self.world.legacy_count:
-            label += f" · {self.world.legacy_count} legacy meshes (dynamic uses a convex hull, 1 kg)"
+            label += f" · {self.world.legacy_count} legacy meshes (moving bodies use convex hulls)"
         speeds = [f"{obj.name}: y={obj.position[1]:.3f} m, speed={np.linalg.norm(obj.velocity):.3f} m/s"
-                  for obj,mass in zip(self.world.scene.objects,self.world.masses) if mass]
+                  for obj in objects if obj.body_type != "static"]
         self.stats.setText(label + ("\n"+" | ".join(speeds[:5]) if speeds else ""))
 
     def closeEvent(self, event):

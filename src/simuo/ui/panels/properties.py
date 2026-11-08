@@ -5,6 +5,7 @@ from pathlib import Path
 from PySide6.QtCore import QEvent, QSignalBlocker, QSize, Qt
 from PySide6.QtWidgets import (
     QDoubleSpinBox,
+    QComboBox,
     QAbstractSpinBox,
     QGridLayout,
     QHBoxLayout,
@@ -13,11 +14,13 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QStyleFactory,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
+from simuo.project.scene import BODY_TYPES
 from simuo.ui.theme import load_stylesheet
 
 
@@ -29,7 +32,10 @@ class TransformSpinBox(QDoubleSpinBox):
         self.mixed = False
         self.typed = False
         self.setFrame(False)
-        self.lineEdit().setStyleSheet("color: #eeeeee; background: transparent; border: none; padding: 0;")
+        self.lineEdit().setStyleSheet(
+            "QLineEdit { color: #eeeeee; background: transparent; border: none; padding: 0; }"
+            "QLineEdit:disabled { color: #8c8c8c; }"
+        )
         self.lineEdit().textEdited.connect(self._typed)
 
     def _typed(self, text):
@@ -56,10 +62,43 @@ class TransformSpinBox(QDoubleSpinBox):
             event.ignore()
 
 
+def numeric_frame(field, axis=None):
+    # A stylesheet border on a buttonless spin box can collapse its editor.
+    frame = QWidget()
+    frame.setObjectName("transformField")
+    if axis is not None:
+        frame.setProperty("axis", axis)
+    frame.setMinimumSize(40, 26)
+    layout = QHBoxLayout(frame)
+    layout.setContentsMargins(8, 3, 4, 3)
+    layout.addWidget(field)
+    return frame
+
+
+def inspector_grid(section):
+    layout = QGridLayout(section.body)
+    layout.setContentsMargins(10, 10, 10, 10)
+    layout.setHorizontalSpacing(4)
+    layout.setVerticalSpacing(6)
+    for column in (1, 2, 3):
+        layout.setColumnStretch(column, 1)
+    return layout
+
+
+def row_reset_button(label, reset):
+    button = QPushButton("↺")
+    button.setObjectName("inspectorReset")
+    button.setFixedWidth(23)
+    button.setToolTip(label)
+    button.setAccessibleName(label)
+    button.clicked.connect(reset)
+    return button
+
+
 class InspectorSection(QWidget):
     """A collapsible component section with an optional, explicit reset action."""
 
-    def __init__(self, title, reset=None):
+    def __init__(self, title, reset=None, reset_tooltip=""):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -68,7 +107,7 @@ class InspectorSection(QWidget):
         self.header.setObjectName("sectionHeader")
         self.header.setFixedHeight(32)
         header = QHBoxLayout(self.header)
-        header.setContentsMargins(0, 0, 8, 0)
+        header.setContentsMargins(0, 0, 10, 0)
         header.setSpacing(6)
         self.toggle = QPushButton(f"▾  {title}")
         self.toggle.setObjectName("sectionToggle")
@@ -80,8 +119,8 @@ class InspectorSection(QWidget):
             self.reset_button = button = QPushButton("Reset")
             button.setObjectName("inspectorReset")
             button.setFixedHeight(22)
-            button.setAccessibleName("Reset transform")
-            button.setToolTip("Reset position and rotation to zero, and scale to one")
+            button.setAccessibleName(f"Reset {title.lower()}")
+            button.setToolTip(reset_tooltip)
             button.clicked.connect(reset)
             header.addWidget(button)
         layout.addWidget(self.header)
@@ -139,12 +178,10 @@ class PropertiesPanel(QWidget):
         form.addWidget(header)
 
         self.transform_section = InspectorSection(
-            "Transform", lambda: state.reset_transforms(self._displayed_ids)
+            "Transform", lambda: state.reset_transforms(self._displayed_ids),
+            "Reset position and rotation to zero, and scale to one",
         )
-        rows = QGridLayout(self.transform_section.body)
-        rows.setContentsMargins(10, 10, 8, 10)
-        rows.setHorizontalSpacing(4)
-        rows.setVerticalSpacing(6)
+        rows = inspector_grid(self.transform_section)
         self.transform_inputs = {}
         self.reset_buttons = {}
         for row, (attribute, title) in enumerate((("position", "Position"), ("rotation", "Rotation"), ("scale", "Scale"))):
@@ -172,30 +209,84 @@ class PropertiesPanel(QWidget):
                 field.editingFinished.connect(
                     lambda field=field, a=attribute, i=axis: self._commit_mixed(field, a, i)
                 )
-                # A stylesheet border on a buttonless spin box can collapse
-                # its text area. Draw the border on its container instead.
-                frame = QWidget()
-                frame.setObjectName("transformField")
-                frame.setProperty("axis", axis_name)
-                frame.setMinimumWidth(40)
-                frame.setMinimumHeight(26)
-                frame_layout = QHBoxLayout(frame)
-                frame_layout.setContentsMargins(8, 3, 4, 3)
-                frame_layout.addWidget(field)
-                rows.addWidget(frame, row, axis + 1)
+                rows.addWidget(numeric_frame(field, axis_name), row, axis + 1)
                 inputs.append(field)
             self.transform_inputs[attribute] = inputs
-            reset = QPushButton("↺")
-            reset.setObjectName("inspectorReset")
-            reset.setFixedWidth(23)
-            reset.setToolTip(f"Reset {title.lower()}")
-            reset.setAccessibleName(f"Reset {title.lower()}")
-            reset.clicked.connect(lambda checked=False, a=attribute: state.reset_transforms(self._displayed_ids, a))
+            reset = row_reset_button(
+                f"Reset {title.lower()}",
+                lambda checked=False, a=attribute: state.reset_transforms(self._displayed_ids, a),
+            )
             rows.addWidget(reset, row, 4)
             self.reset_buttons[attribute] = reset
-        for column in (1, 2, 3):
-            rows.setColumnStretch(column, 1)
         form.addWidget(self.transform_section)
+
+        self.physics_section = InspectorSection(
+            "Physics", lambda: self._reset_physics(), "Restore the part's physics defaults and clear acceleration",
+        )
+        physics = inspector_grid(self.physics_section)
+        self.body_type = QComboBox()
+        self.body_type.setObjectName("inspectorCombo")
+        combo_style = QStyleFactory.create("Fusion")
+        combo_style.setParent(self.body_type)
+        self.body_type.setStyle(combo_style)
+        self.body_type.setFixedHeight(26)
+        self.body_type.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+        self.body_type.setAccessibleName("Body Type")
+        for mode in BODY_TYPES:
+            self.body_type.addItem(mode.title(), mode)
+        self.body_type.currentIndexChanged.connect(
+            lambda: self.state.set_physics_properties(self._displayed_id, body_type=self.body_type.currentData())
+        )
+        physics.addWidget(QLabel("Body Type"), 0, 0)
+        physics.addWidget(self.body_type, 0, 1, 1, 3)
+        self.bounce = self._physics_input("Bounce", 0, 1)
+        self.bounce.setSingleStep(.05)
+        self.bounce.setToolTip("Controls how much the object bounces on contact, from 0 to 1. "
+                               "The other surface also affects the result.")
+        self.bounce.valueChanged.connect(
+            lambda value: self.state.set_physics_properties(self._displayed_id, bounce=value)
+        )
+        physics.addWidget(QLabel("Bounce"), 1, 0)
+        physics.addWidget(numeric_frame(self.bounce), 1, 1, 1, 3)
+        self.physics_resets = {
+            "bounce": row_reset_button("Restore the part's default bounce", lambda: self._reset_physics("bounce"))
+        }
+        physics.addWidget(self.physics_resets["bounce"], 1, 4)
+        self.motion_inputs = {}
+        for row, (attribute, title, units) in enumerate((
+            ("velocity", "Velocity", "m/s"),
+            ("acceleration", "Accel.", "m/s²"),
+        ), start=2):
+            full_title = "Linear Velocity" if attribute == "velocity" else "Linear Acceleration"
+            label = QLabel(title)
+            label.setToolTip(f"{full_title} ({units})")
+            physics.addWidget(label, row, 0)
+            fields = []
+            for axis, axis_name in enumerate("XYZ"):
+                field = self._physics_input(f"{full_title} {axis_name}", -1e12, 1e12)
+                field.setPrefix(f"{axis_name} ")
+                field.setToolTip(f"{full_title} {axis_name} ({units})")
+                field.valueChanged.connect(
+                    lambda value, a=attribute, i=axis: self._set_motion_component(a, i, value)
+                )
+                physics.addWidget(numeric_frame(field, axis_name), row, axis + 1)
+                fields.append(field)
+            self.motion_inputs[attribute] = fields
+            reset = row_reset_button(
+                "Restore the part's starting velocity" if attribute == "velocity" else "Reset acceleration to zero",
+                lambda checked=False, a=attribute: self._reset_physics(a),
+            )
+            physics.addWidget(reset, row, 4)
+            self.physics_resets[attribute] = reset
+        label_width = max(grid.itemAtPosition(row, 0).sizeHint().width()
+                          for grid in (rows, physics) for row in range(grid.rowCount()))
+        rows.setColumnMinimumWidth(0, label_width)
+        physics.setColumnMinimumWidth(0, label_width)
+        physics.setColumnMinimumWidth(4, 23)
+        self.physics_hint = QLabel("Select one object to edit its physics settings.")
+        self.physics_hint.setWordWrap(True)
+        physics.addWidget(self.physics_hint, 4, 0, 1, 5)
+        form.addWidget(self.physics_section)
 
         self.mesh_section = InspectorSection("Mesh")
         mesh_layout = QVBoxLayout(self.mesh_section.body)
@@ -218,6 +309,58 @@ class PropertiesPanel(QWidget):
         state.object_changed.connect(self._object_changed)
         self._show_object(state.selected_object)
 
+    def _physics_input(self, name, minimum, maximum):
+        field = TransformSpinBox()
+        field.setRange(minimum, maximum)
+        field.setDecimals(6)
+        field.setKeyboardTracking(False)
+        field.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        field.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+        field.setAccessibleName(name)
+        return field
+
+    def _set_motion_component(self, attribute, axis, value):
+        obj = self.state.find_object(self._displayed_id)
+        if obj is not None:
+            vector = list(getattr(obj, attribute))
+            vector[axis] = value
+            self.state.set_physics_properties(obj.identifier, **{attribute: vector})
+
+    def _reset_physics(self, attribute=None):
+        obj = self.state.find_object(self._displayed_id)
+        if obj is None or len(self._displayed_ids) != 1:
+            return
+        defaults = {
+            "body_type": obj.part.body_type if obj.part else "static",
+            "bounce": obj.part.restitution if obj.part else 0.0,
+            "velocity": list(obj.part.velocity) if obj.part else [0, 0, 0],
+            "acceleration": [0, 0, 0],
+        }
+        changes = defaults if attribute is None else {attribute: defaults[attribute]}
+        self.state.set_physics_properties(obj.identifier, **changes)
+
+    def _show_physics(self, obj):
+        self.physics_hint.setVisible(obj is None)
+        self.physics_section.reset_button.setEnabled(obj is not None)
+        self.body_type.setEnabled(obj is not None)
+        self.bounce.setEnabled(obj is not None)
+        self.physics_resets["bounce"].setEnabled(obj is not None)
+        moving = obj is not None and obj.body_type != "static"
+        with QSignalBlocker(self.body_type), QSignalBlocker(self.bounce):
+            self.body_type.setCurrentIndex(self.body_type.findData(obj.body_type) if obj else -1)
+            self.bounce.setValue(obj.restitution if obj else 0)
+            self.bounce.set_mixed(False)
+        for attribute, fields in self.motion_inputs.items():
+            self.physics_resets[attribute].setEnabled(moving)
+            values = getattr(obj, attribute) if obj else (0, 0, 0)
+            for field, value in zip(fields, values):
+                field.setEnabled(moving)
+                with QSignalBlocker(field):
+                    limit = max(1e12, abs(value))
+                    field.setRange(-limit, limit)
+                    field.setValue(value)
+                    field.set_mixed(False)
+
     def sizeHint(self):
         return QSize(340, 400)
 
@@ -234,6 +377,7 @@ class PropertiesPanel(QWidget):
     def _show_object(self, obj):
         self._displayed_id = obj.identifier if obj is not None else None
         self._displayed_ids = self.state.selected_ids
+        self._show_physics(obj if len(self._displayed_ids) == 1 else None)
         selected = self.state.selected_objects
         multiple = len(selected) > 1
         self.stack.setCurrentIndex(1 if obj is not None else 0)

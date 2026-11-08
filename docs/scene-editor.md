@@ -135,8 +135,6 @@
 - **View → Frame Selected** (`F`) and **Frame Scene** (`Shift+F`) remain available.
   Camera controls are unchanged and pause during selection/transform drags.
 
-Use **Edit → Physics Properties** to edit bounce, body type, and starting velocity. **Render** opens the physics playback window for the current scene.
-
 ## Import and save
 
 Use **Import File** to add a `.simuOPart` or OBJ mesh. An OBJ import can create
@@ -147,10 +145,21 @@ scene save. Keep the resulting part files with the scene when moving it.
 
 ## Physics playback
 
-Use **Edit → Physics Properties** to set the body's static/dynamic mode,
-bounce, and initial velocity for the scene instance. Choose **Render** to run
-a separate simulation of the scene. Reopen playback after changing scene
-properties to use the new values.
+Select one object and open **Physics** in the Properties dock. The same
+settings are available through **Edit → Physics Properties**.
+
+- **Static** stays fixed. Velocity and acceleration controls are disabled.
+- **Dynamic** starts with the specified velocity and responds to gravity and
+  collisions. Linear acceleration adds to gravity.
+- **Kinematic** follows the specified world-axis linear velocity and
+  acceleration. It can push dynamic objects while continuing along its
+  prescribed path. Its orientation stays fixed.
+- **Bounce** ranges from 0 to 1 and is available for all three modes. Both
+  surfaces' settings affect the bounce at contact.
+
+Velocity is in m/s and acceleration is in m/s². Choose **Render** to simulate
+a copy of the scene. Reopen playback after editing physics settings to use
+the new values.
 
 Playback provides **Pause/Play** (`P`), **Step** (1/240 s), **Reset** (`R`),
 **Frame scene** (`F`), gravity, and an optional floor. Bullet uses the

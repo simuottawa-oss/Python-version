@@ -133,6 +133,7 @@ class HierarchyPanel(QWidget):
         contents.installEventFilter(self)
         self.scroll.viewport().installEventFilter(self)
         contents.setObjectName("hierarchyContents")
+        contents.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
         self.rows_layout = QVBoxLayout(contents)
         self.rows_layout.setContentsMargins(0, 0, 0, 0)
         self.rows_layout.setSpacing(0)

@@ -43,6 +43,10 @@ def main():
                 assert render.viewport.isValid()
                 world = render.world
                 assert world.time > 0
+                moving = world.scene.objects[0]
+                assert moving.body_type == "kinematic"
+                assert abs(moving.velocity[0] - (1 + 2 * world.time)) < 1e-8
+                assert moving.position[0] > window.scene.objects[0].position[0]
                 settings = world.bullet.getDynamicsInfo(world.bodies[0], -1, physicsClientId=world.client)
                 assert abs(settings[5]-.8) < 1e-8
                 assert not render.viewport.grabFramebuffer().isNull()
@@ -57,7 +61,9 @@ def main():
             dialog = QApplication.activeModalWidget()
             try:
                 assert isinstance(dialog, PropertiesDialog)
+                dialog.body_type.setCurrentIndex(dialog.body_type.findData("kinematic"))
                 dialog.bounce.setValue(.8)
+                dialog.acceleration[0].setValue(2)
                 for widget, value in zip(dialog.velocity, [1, 2, -3]):
                     widget.setValue(value)
                 dialog.grab().save(str(Path(tempfile.gettempdir()) / 'simuo-properties.png'))
@@ -83,7 +89,9 @@ def main():
                 window.loadFile(path)
                 assert window.scene.objects[0].restitution == .8
                 assert window.scene.objects[0].velocity == [1, 2, -3]
-                print('PASS saved scene restores edited bounce and velocity', flush=True)
+                assert window.scene.objects[0].body_type == "kinematic"
+                assert window.scene.objects[0].acceleration == [2, 0, 0]
+                print('PASS saved scene restores kinematic mode, bounce, and motion', flush=True)
                 window.openPhysicsRender()
                 QTimer.singleShot(500, check_render)
             except BaseException:

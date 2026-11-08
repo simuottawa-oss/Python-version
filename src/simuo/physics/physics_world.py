@@ -113,7 +113,7 @@ class PhysicsWorld:
 
     def _build(self):
         """Create floor and part collision bodies, masses, material response, inertia, and
-        initial velocities. Dynamic mesh bodies use convex hulls; static meshes retain
+        initial velocities. Moving mesh bodies use convex hulls; static meshes retain
         concavities.
 
         Returns:
@@ -133,6 +133,7 @@ class PhysicsWorld:
             b.changeDynamics(floor,-1,lateralFriction=1,restitution=1,physicsClientId=client)
         for obj in self.scene.objects:
             part = obj.part
+            dynamic = obj.body_type == "dynamic"
             scale = np.asarray(obj.scale)
             if part:
                 size = np.asarray(part.size)*scale
@@ -140,23 +141,20 @@ class PhysicsWorld:
                     shape = b.createCollisionShape(b.GEOM_BOX,halfExtents=(size/2).tolist(),physicsClientId=client)
                 else:
                     mesh = obj.asset.vertices.reshape(-1,6)[:,:3]
-                    options = {} if obj.body_type == "dynamic" else {
+                    options = {} if obj.body_type != "static" else {
                         "indices":list(range(len(mesh))), "flags":b.GEOM_FORCE_CONCAVE_TRIMESH,
                     }
                     shape = b.createCollisionShape(b.GEOM_MESH,vertices=mesh.tolist(),meshScale=obj.scale,
                                                   physicsClientId=client,**options)
                 mass = part.mass * (float(np.prod(scale)) if part.mass_source == "density" else 1)
-                if obj.body_type == "static":
+                if not dynamic:
                     mass = 0
                 friction = part.friction
             else:
                 self.legacy_count += 1
                 vertices = obj.asset.vertices.reshape(-1,6)[:,:3]
-                dynamic = obj.body_type == "dynamic"
-                # Bullet supports moving mesh hulls, while concave triangle
-                # meshes must remain static. Do not use static mesh flags for
-                # an object that the user has made dynamic.
-                mesh_options = {} if dynamic else {
+                # Concave triangle meshes are used only for fixed bodies.
+                mesh_options = {} if obj.body_type != "static" else {
                     "indices": list(range(len(vertices))), "flags": b.GEOM_FORCE_CONCAVE_TRIMESH,
                 }
                 shape = b.createCollisionShape(b.GEOM_MESH,vertices=vertices.tolist(),
@@ -225,13 +223,27 @@ class PhysicsWorld:
         b, client = self.bullet, self.client
         for _ in range(count):
             for obj, body, mass in zip(self.scene.objects,self.bodies,self.masses):
-                if mass and any(obj.acceleration):
+                if obj.body_type == "kinematic":
+                    self._advance_kinematic(obj, body)
+                elif mass and any(obj.acceleration):
                     position, _ = b.getBasePositionAndOrientation(body,physicsClientId=client)
                     b.applyExternalForce(body,-1,(np.asarray(obj.acceleration)*mass).tolist(),position,
                                          b.WORLD_FRAME,physicsClientId=client)
             b.stepSimulation(physicsClientId=client)
             self.steps += 1
         self.sync()
+
+    def _advance_kinematic(self, obj, body):
+        b, client = self.bullet, self.client
+        # Use the step's mean velocity for both the prescribed displacement
+        # and Bullet's contact response. A zero-mass body ignores impulses.
+        velocity = np.asarray(obj.velocity)
+        change = np.asarray(obj.acceleration) * self.dt
+        mean_velocity = velocity + change / 2
+        b.resetBasePositionAndOrientation(body, obj.position, quaternion(obj.rotation), physicsClientId=client)
+        b.resetBaseVelocity(body, linearVelocity=mean_velocity.tolist(), physicsClientId=client)
+        obj.position = (np.asarray(obj.position) + mean_velocity * self.dt).tolist()
+        obj.velocity = (velocity + change).tolist()
 
     def sync(self):
         """Copy Bullet poses and velocities back into dynamic objects in the simulation

@@ -50,9 +50,9 @@ class ToolOptionCombo(QComboBox):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         enabled = self.isEnabled()
-        border = '#81add7' if enabled and (self.hasFocus() or self.underMouse()) else '#4b5867'
+        border = '#ae8490' if enabled and (self.hasFocus() or self.underMouse()) else '#55434b'
         painter.setPen(QPen(QColor(border), 1))
-        painter.setBrush(QColor('#343c47' if enabled else '#2b323c'))
+        painter.setBrush(QColor('#393035' if enabled else '#302a2d'))
         painter.drawRoundedRect(QRectF(self.rect()).adjusted(.5, .5, -.5, -.5), 3, 3)
         color = QColor('#d5dde7' if enabled else '#95a2b3')
         painter.setPen(color)

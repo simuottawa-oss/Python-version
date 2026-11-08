@@ -5,6 +5,9 @@ from simuo.parts.part_assets import load_asset
 from simuo.parts.part_format import number, vector
 
 
+BODY_TYPES = ("static", "dynamic", "kinematic")
+
+
 class SceneObject:
     """Represent a single mesh instance inside the simulation scene.
 
@@ -160,7 +163,7 @@ class SceneObject:
         """Resolve body behavior from the instance override or part definition.
 
         Returns:
-            str: dynamic or static; legacy meshes default to static.
+            str: static, dynamic, or kinematic; legacy meshes default to static.
         """
         if self._body_type is not None:
             return self._body_type
@@ -171,24 +174,24 @@ class SceneObject:
         """Store a validated instance body-type override.
 
         Args:
-            value (str): Either dynamic or static.
+            value (str): Static, dynamic, or kinematic.
 
         Returns:
-            None. Raises ValueError unless the value is dynamic or static.
+            None. Raises ValueError for unsupported body types.
         """
-        if value not in ("static", "dynamic"):
-            raise ValueError("Body type must be static or dynamic")
+        if value not in BODY_TYPES:
+            raise ValueError("Body type must be static, dynamic, or kinematic")
         self._body_type = value
 
-    def setPhysicsProperties(self, bounce, velocity, body_type=None):
+    def setPhysicsProperties(self, bounce, velocity, body_type=None, acceleration=None):
         """Validate all requested physics edits before applying instance overrides and
         velocity. Does not mark the containing scene dirty.
 
         Args:
             bounce (float): Finite restitution coefficient between 0 and 1.
             velocity (list): Three finite starting linear velocity components in m/s.
-            body_type (str, optional): dynamic or static; None preserves the current
-                instance behavior.
+            body_type (str, optional): Overrides the instance body type.
+            acceleration (list, optional): Three finite acceleration components in m/s².
 
         Returns:
             None. Updates bounce, velocity, and optional body type; validation failures
@@ -196,10 +199,14 @@ class SceneObject:
         """
         bounce = number(bounce, "Bounce", minimum=0, maximum=1)
         velocity = vector(velocity, "Velocity")
-        if body_type is not None and body_type not in ("static", "dynamic"):
-            raise ValueError("Body type must be static or dynamic")
+        if body_type is not None and body_type not in BODY_TYPES:
+            raise ValueError("Body type must be static, dynamic, or kinematic")
+        if acceleration is not None:
+            acceleration = vector(acceleration, "Acceleration")
         self.restitution = bounce
         self.velocity = list(velocity)
+        if acceleration is not None:
+            self.acceleration = list(acceleration)
         if body_type is not None:
             self.body_type = body_type
 

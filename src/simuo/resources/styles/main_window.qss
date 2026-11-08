@@ -45,7 +45,7 @@ QMenuBar::item {
 }
 
 QMenuBar::item:selected {
-    background-color: #3a3a3a;
+    background-color: #8f001a;
 }
 
 QMenu {
@@ -54,7 +54,7 @@ QMenu {
 }
 
 QMenu::item:selected {
-    background-color: #444444;
+    background-color: #8f001a;
 }
 
 QDialog {

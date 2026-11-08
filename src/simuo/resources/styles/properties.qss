@@ -24,10 +24,25 @@ QWidget#transformField {
 QWidget#transformField[axis="X"] { border-left-color: #c35a5a; }
 QWidget#transformField[axis="Y"] { border-left-color: #78a85a; }
 QWidget#transformField[axis="Z"] { border-left-color: #5b8ec2; }
-QWidget#transformField QDoubleSpinBox:focus { background: #303b48; }
+QWidget#transformField QDoubleSpinBox:focus { background: #582234; }
 QPushButton#inspectorReset {
     color: #bbbbbb; background: #393939; border: 1px solid #4a4a4a;
     border-radius: 3px; padding: 2px 5px; font-size: 11px;
 }
 QPushButton#inspectorReset:hover { color: white; background: #4b4b4b; }
 QScrollArea { border: none; background: #292929; }
+
+QComboBox#inspectorCombo {
+    color: #eeeeee; background: #1f1f1f; border: 1px solid #444444;
+    border-radius: 3px; padding-left: 7px; padding-right: 4px; font-size: 11px;
+}
+QComboBox#inspectorCombo:hover, QComboBox#inspectorCombo:focus {
+    border-color: #d18c99;
+}
+QComboBox#inspectorCombo:disabled, QPushButton#inspectorReset:disabled {
+    color: #8c8c8c;
+}
+QComboBox#inspectorCombo QAbstractItemView {
+    color: #eeeeee; background: #292929; border: 1px solid #454545;
+    selection-background-color: #8f001a;
+}

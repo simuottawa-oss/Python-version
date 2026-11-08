@@ -86,6 +86,38 @@ class PhysicsTests(unittest.TestCase):
         world.step(48)
         np.testing.assert_allclose(world.scene.objects[0].velocity,[.4,0,0],atol=1e-8)
 
+    def test_kinematic_acceleration_ignores_gravity_and_resets(self):
+        source = self.part(position=[1, 2, 3], velocity=[2, 0, 0], acceleration=[4, 0, 0])
+        source.body_type = "kinematic"
+        world = self.world(source, floor=False)
+        obj = world.scene.objects[0]
+        world.step(240)
+
+        self.assertEqual(world.masses, [0])
+        np.testing.assert_allclose(obj.position, [5, 2, 3])
+        np.testing.assert_allclose(obj.velocity, [6, 0, 0])
+        bullet_position, _ = world.bullet.getBasePositionAndOrientation(world.bodies[0], physicsClientId=world.client)
+        np.testing.assert_allclose(bullet_position, obj.position)
+        self.assertEqual(source.position, [1, 2, 3])
+        world.reset()
+        self.assertEqual(obj.position, source.position)
+        self.assertEqual(obj.velocity, source.velocity)
+
+    def test_kinematic_collider_pushes_dynamic_body_and_uses_bounce(self):
+        speeds = []
+        for bounce in (0, 1):
+            platform = self.part(position=[-2, 0, 0], velocity=[2, 0, 0])
+            platform.setPhysicsProperties(bounce, platform.velocity, "kinematic")
+            block = self.part(position=[0, 0, 0])
+            block.setPhysicsProperties(1, block.velocity, "dynamic")
+            world = self.world(platform, block, gravity=0, floor=False)
+            world.step(240)
+            moving, pushed = world.scene.objects
+            np.testing.assert_allclose(moving.position, [0, 0, 0], atol=1e-10)
+            self.assertGreater(pushed.position[0], 0.1)
+            speeds.append(pushed.velocity[0])
+        self.assertGreater(speeds[1], speeds[0] + 0.5)
+
     def test_static_and_legacy_geometry(self):
         base = SceneObject(meshPath=ROOT / "Assets/cube.simuOPart")
         base.position = [0,.5,0]

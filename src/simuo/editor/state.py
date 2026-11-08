@@ -1,6 +1,6 @@
 """Shared editor selection, edits, grouping, and temporary view state."""
 
-from copy import deepcopy
+from copy import copy, deepcopy
 import math
 import re
 from uuid import uuid4
@@ -241,6 +241,24 @@ class EditorState(QObject):
             vector[axis] = value
             updates.append((obj, attribute, vector))
         return self._edit("Change " + attribute.title(), updates)
+
+    def set_physics_properties(self, identifier, *, bounce=None, velocity=None, body_type=None, acceleration=None):
+        obj = self.find_object(identifier)
+        if obj is None:
+            return False
+        updated = copy(obj)
+        updated.setPhysicsProperties(
+            obj.restitution if bounce is None else bounce,
+            obj.velocity if velocity is None else velocity,
+            body_type,
+            acceleration,
+        )
+        changes = []
+        for field, storage in (("restitution", "_restitution"), ("body_type", "_body_type"),
+                               ("velocity", "velocity"), ("acceleration", "acceleration")):
+            if getattr(obj, field) != getattr(updated, field):
+                changes.append((obj, storage, getattr(updated, storage)))
+        return self._edit("Change Physics Properties", changes)
 
     def duplicate_selected(self):
         self.cancel_transform()

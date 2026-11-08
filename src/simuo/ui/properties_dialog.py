@@ -1,8 +1,11 @@
 """Scene-object material and motion controls."""
 
 from PySide6.QtWidgets import (
-    QCheckBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout, QLabel, QVBoxLayout,
+    QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout, QLabel, QVBoxLayout,
 )
+
+
+from simuo.project.scene import BODY_TYPES
 
 
 class PropertiesDialog(QDialog):
@@ -28,11 +31,12 @@ class PropertiesDialog(QDialog):
         layout.addWidget(guidance)
         form = QFormLayout()
         layout.addLayout(form)
-        self.dynamic = QCheckBox("Dynamic body")
-        self.dynamic.setObjectName("dynamicBody")
-        self.dynamic.setChecked(scene_object.body_type == "dynamic")
-        self.dynamic.setToolTip("Checked: moves under physics. Unchecked: static and fixed in place.")
-        form.addRow("Body behavior:", self.dynamic)
+        self.body_type = QComboBox()
+        self.body_type.setObjectName("bodyType")
+        for mode in BODY_TYPES:
+            self.body_type.addItem(mode.title(), mode)
+        self.body_type.setCurrentIndex(self.body_type.findData(scene_object.body_type))
+        form.addRow("Body Type", self.body_type)
         self.bounce = QDoubleSpinBox()
         self.bounce.setObjectName("bounce")
         self.bounce.setRange(0, 1)
@@ -44,23 +48,28 @@ class PropertiesDialog(QDialog):
         self.bounce.valueChanged.connect(self._markBounceChanged)
         self.bounce.setToolTip("0: no bounce. 1: fully elastic contact. The other surface also affects the result.")
         form.addRow("Bounce (0–1):", self.bounce)
-        self.velocity = []
-        self._originalVelocity = list(scene_object.velocity)
-        self._velocityChanged = set()
-        for axis, value in zip("XYZ", scene_object.velocity):
-            control = QDoubleSpinBox()
-            control.setObjectName(f"velocity{axis}")
-            limit = max(1e12, abs(value))
-            control.setRange(-limit, limit)
-            control.setDecimals(6)
-            control.setSuffix(" m/s")
-            control.setValue(value)
-            form.addRow(f"Velocity {axis}:", control)
-            self.velocity.append(control)
-            index = len(self.velocity) - 1
-            control.valueChanged.connect(lambda value, i=index: self._velocityChanged.add(i))
-        note = ("Check Dynamic body to enable motion; uncheck it to keep the object fixed. "
-                "Starting velocity applies when dynamic. Open a new Render window to use changes.")
+        self._motion = {}
+        for attribute, title, units in (
+            ("velocity", "Velocity", "m/s"),
+            ("acceleration", "Acceleration", "m/s²"),
+        ):
+            controls = []
+            for axis, value in zip("XYZ", getattr(scene_object, attribute)):
+                control = QDoubleSpinBox()
+                control.setObjectName(attribute + axis)
+                limit = max(1e12, abs(value))
+                control.setRange(-limit, limit)
+                control.setDecimals(6)
+                control.setSuffix(f" {units}")
+                control.setValue(value)
+                form.addRow(f"{title} {axis}", control)
+                controls.append((control, value, control.value()))
+            self._motion[attribute] = controls
+            setattr(self, attribute, [control for control, _, _ in controls])
+        self.body_type.currentIndexChanged.connect(self._sync_motion)
+        self._sync_motion()
+        note = ("Dynamic bodies respond to gravity and contacts. Kinematic bodies follow the "
+                "velocity and acceleration you set. Open a new Render window to use changes.")
         if scene_object.part is None:
             note += " Dynamic legacy meshes use a convex hull with a default mass of 1 kg."
         elif scene_object.part.sketch is not None or scene_object.part.features is not None:
@@ -86,16 +95,18 @@ class PropertiesDialog(QDialog):
         """
         self._bounceChanged = True
 
-    def values(self):
-        # Preserve file precision for controls the user did not edit.
-        """Read edited bounce and velocity controls, preserving original precision for
-        untouched fields. Body type is read separately from the checkbox.
+    def _sync_motion(self):
+        enabled = self.body_type.currentData() != "static"
+        for controls in self._motion.values():
+            for control, _, _ in controls:
+                control.setEnabled(enabled)
 
-        Returns:
-            tuple: Bounce float and three-component velocity list in m/s; does not apply
-            them to the object.
-        """
-        bounce = self.bounce.value() if self._bounceChanged else self._originalBounce
-        velocity = [control.value() if i in self._velocityChanged else self._originalVelocity[i]
-                    for i, control in enumerate(self.velocity)]
-        return bounce, velocity
+    def values(self):
+        """Return edits while preserving the precision of untouched fields."""
+        return {
+            "body_type": self.body_type.currentData(),
+            "bounce": self.bounce.value() if self._bounceChanged else self._originalBounce,
+            **{name: [original if control.value() == displayed else control.value()
+                      for control, original, displayed in controls]
+               for name, controls in self._motion.items()},
+        }

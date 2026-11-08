@@ -309,7 +309,7 @@ class SimuOStartMenu(ctk.CTkToplevel):
             fill="x"
         )
 
-        ctk.CTkLabel(button_frame,text="PART EDITOR",text_color="#a8c5d6").pack(pady=(12,4))
+        ctk.CTkLabel(button_frame,text="PART EDITOR",text_color="#e3b4bd").pack(pady=(12,4))
         for text,callback in (("New Part",self._new_part),("Open Part…",self._open_part)):
             ctk.CTkButton(button_frame,text=text,command=callback,height=38,
                           fg_color="#3f3f3f",hover_color="#525252",

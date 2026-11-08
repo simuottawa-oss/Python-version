@@ -141,25 +141,26 @@ class PropertiesTests(unittest.TestCase):
             info = world.bullet.getDynamicsInfo(world.bodies[0], -1, physicsClientId=world.client)
             self.assertAlmostEqual(info[5], .65)
 
-    def set_dynamic_checkbox(self, checked, accept=True):
+    def select_body_type(self, mode, accept=True):
         def interact(dialog):
-            dialog.dynamic.setChecked(checked)
+            dialog.body_type.setCurrentIndex(dialog.body_type.findData(mode))
             return QDialog.Accepted if accept else QDialog.Rejected
         with patch.object(PropertiesDialog, 'exec', new=interact):
             self.window.propertiesAction.trigger()
 
-    def test_dynamic_checkbox_defaults_and_cancel(self):
+    def test_body_type_defaults_and_cancel(self):
         dialog = PropertiesDialog(self.obj)
-        self.assertTrue(dialog.dynamic.isChecked())
+        self.assertEqual(dialog.body_type.currentData(), "dynamic")
         legacy = SceneObject(meshPath=ROOT/'Assets/cube.simuOPart')
-        self.assertFalse(PropertiesDialog(legacy).dynamic.isChecked())
-        self.set_dynamic_checkbox(False, accept=False)
+        static_dialog = PropertiesDialog(legacy)
+        self.assertEqual(static_dialog.body_type.currentData(), "static")
+        self.select_body_type("static", accept=False)
         self.assertEqual(self.obj.body_type, 'dynamic')
         self.assertFalse(self.window.scene.dirty)
 
-    def test_checkbox_switches_between_static_and_dynamic_in_bullet(self):
+    def test_switches_between_static_and_dynamic_in_bullet(self):
         original_part = self.obj.part
-        self.set_dynamic_checkbox(False)
+        self.select_body_type("static")
         self.assertEqual(self.obj.body_type, 'static')
         self.assertTrue(self.window.scene.dirty)
         with PhysicsWorldContext(self.window.scene) as world:
@@ -167,7 +168,7 @@ class PropertiesTests(unittest.TestCase):
             world.set_gravity(-9.81)
             world.step(48)
             self.assertEqual(world.scene.objects[0].position, self.obj.position)
-        self.set_dynamic_checkbox(True)
+        self.select_body_type("dynamic")
         with PhysicsWorldContext(self.window.scene) as world:
             self.assertGreater(world.masses[0], 0)
             world.set_gravity(-9.81)
@@ -178,21 +179,23 @@ class PropertiesTests(unittest.TestCase):
 
     def test_body_type_persists_without_changing_original_part(self):
         original = Path(self.obj.meshPath).read_bytes()
-        self.set_dynamic_checkbox(False)
+        self.select_body_type("static")
         path = self.folder/'static.simuO'
         self.assertTrue(self.window.saveFile(destination=path))
         self.assertEqual(json.loads(path.read_text())['objects'][0]['body_type'], 'static')
         self.window.loadFile(path, uploadToGPU=False)
         loaded = self.window.scene.objects[0]
         self.assertEqual(loaded.body_type, 'static')
-        self.assertFalse(PropertiesDialog(loaded).dynamic.isChecked())
+        static_dialog = PropertiesDialog(loaded)
+        self.assertEqual(static_dialog.body_type.currentData(), "static")
         self.assertEqual(Path(loaded.meshPath).read_bytes(), original)
         self.assertEqual(loaded.part.body_type, 'dynamic')
 
     def test_originally_static_json_can_become_dynamic(self):
         self.obj.part = replace(self.obj.part, body_type='static')
-        self.assertFalse(PropertiesDialog(self.obj).dynamic.isChecked())
-        self.set_dynamic_checkbox(True)
+        static_dialog = PropertiesDialog(self.obj)
+        self.assertEqual(static_dialog.body_type.currentData(), "static")
+        self.select_body_type("dynamic")
         with PhysicsWorldContext(self.window.scene) as world:
             self.assertGreater(world.masses[0], 0)
         self.assertEqual(self.obj.part.body_type, 'static')
@@ -201,7 +204,7 @@ class PropertiesTests(unittest.TestCase):
         legacy = SceneObject(meshPath=ROOT/'Assets/cube.simuOPart')
         legacy.position = [0,3,0]
         self.window.scene.objects[:] = [legacy]
-        self.set_dynamic_checkbox(True)
+        self.select_body_type("dynamic")
         self.assertEqual(legacy.body_type, 'dynamic')
         path = self.folder/'legacy-dynamic.simuO'
         self.assertTrue(self.window.saveFile(destination=path))
@@ -216,10 +219,29 @@ class PropertiesTests(unittest.TestCase):
         self.assertAlmostEqual(world.scene.objects[0].position[1], 1, delta=.015)
         self.assertEqual(legacy.position, [0,3,0])
 
+    def test_dialog_edits_kinematic_motion_and_preserves_it_when_reopened(self):
+        def edit(dialog):
+            dialog.body_type.setCurrentIndex(dialog.body_type.findData("kinematic"))
+            dialog.acceleration[0].setValue(3)
+            return QDialog.Accepted
+
+        with patch.object(PropertiesDialog, "exec", new=edit):
+            self.window.propertiesAction.trigger()
+        self.assertEqual(self.obj.body_type, "kinematic")
+        self.assertEqual(self.obj.acceleration, [3, 0, 0])
+
+        with patch.object(PropertiesDialog, "exec", return_value=QDialog.Accepted):
+            self.window.propertiesAction.trigger()
+        self.assertEqual(self.obj.body_type, "kinematic")
+        self.assertEqual(self.window.editor_state.undo_stack.count(), 1)
+        self.window.editor_state.undo_stack.undo()
+        self.assertEqual(self.obj.body_type, "dynamic")
+        self.assertEqual(self.obj.acceleration, [0, 0, 0])
+
     def test_invalid_body_type_does_not_partially_apply(self):
         velocity = self.obj.velocity[:]
         with self.assertRaises(ValueError):
-            self.obj.setPhysicsProperties(.9, [1,2,3], 'kinematic')
+            self.obj.setPhysicsProperties(.9, [1,2,3], 'unknown')
         self.assertEqual(self.obj.restitution, .45)
         self.assertEqual(self.obj.velocity, velocity)
         self.assertEqual(self.obj.body_type, 'dynamic')

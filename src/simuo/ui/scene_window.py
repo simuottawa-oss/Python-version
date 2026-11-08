@@ -5,7 +5,6 @@ provides scene-editing dialogs for object positioning and rotation.
 """
 import sys
 from pathlib import Path
-from copy import copy
 import json
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence
@@ -349,8 +348,8 @@ class SimuOMainWindow(QMainWindow):
                 objectData.get("restitution", sceneObject.restitution),
                 objectData.get("velocity", sceneObject.velocity),
                 objectData.get("body_type", sceneObject.body_type),
+                objectData.get("acceleration", sceneObject.acceleration),
             )
-            sceneObject.acceleration = list(objectData.get("acceleration", sceneObject.acceleration))
             sceneObject.angularVelocity = list(objectData.get("angularVelocity", sceneObject.angularVelocity))
 
             read_object_editor(sceneObject, objectData)
@@ -1226,16 +1225,7 @@ class SimuOMainWindow(QMainWindow):
         dialog = PropertiesDialog(sceneObject, self)
         if dialog.exec() != QDialog.Accepted:
             return
-        bounce, velocity = dialog.values()
-        body_type = "dynamic" if dialog.dynamic.isChecked() else "static"
-        if (bounce != sceneObject.restitution or velocity != sceneObject.velocity
-                or body_type != sceneObject.body_type):
-            updated = copy(sceneObject)
-            updated.setPhysicsProperties(bounce, velocity, body_type)
-            self.editor_state._edit("Change Physics Properties", [
-                (sceneObject, field, getattr(updated, field))
-                for field in ("_restitution", "_body_type", "velocity")
-            ])
+        self.editor_state.set_physics_properties(sceneObject.identifier, **dialog.values())
 
     def openPhysicsRender(self):
         """Open and retain an independent live simulation window for the current scene.

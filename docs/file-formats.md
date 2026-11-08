@@ -4,7 +4,7 @@
 
 A `.simuO` scene saves JSON with `version: 1` and an `objects` array. Each
 object stores its ID, name, external `meshPath`, position, rotation, scale,
-motion, body type, and bounce. Optional `editor` values store visibility and
+motion, body type (`static`, `dynamic`, or `kinematic`), and bounce. Optional `editor` values store visibility and
 selection lock. Top-level `groups` and `hierarchy_order` store the hierarchy by
 ID. Older scenes can omit IDs and panel metadata.
 

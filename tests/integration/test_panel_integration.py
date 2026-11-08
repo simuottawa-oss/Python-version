@@ -53,6 +53,59 @@ class PanelIntegrationTests(unittest.TestCase):
                 QTest.keyClick(editor, Qt.Key.Key_Return)
                 self.assertEqual(getattr(obj, attribute)[0], new_value)
 
+    def test_physics_dock_edits_are_undoable_and_persist(self):
+        source = self.folder / "scene.simuO"
+        source.write_text(json.dumps({"version": 1, "objects": [
+            {"name": "Platform", "meshPath": str(ROOT / "Assets/aluminum_cube.simuOPart"),
+             "body_type": "static"}
+        ]}))
+        self.window.loadFile(source)
+        obj = self.window.scene.objects[0]
+        state = self.window.editor_state
+        state.select(obj.identifier)
+        panel = self.window.panel_manager.docks["properties"].widget()
+        velocity = panel.motion_inputs["velocity"][0]
+        acceleration = panel.motion_inputs["acceleration"][0]
+        self.assertFalse(velocity.isEnabled())
+        self.assertFalse(acceleration.isEnabled())
+        self.assertTrue(panel.bounce.isEnabled())
+        self.assertFalse(panel.physics_resets["velocity"].isEnabled())
+        self.assertFalse(panel.physics_resets["acceleration"].isEnabled())
+
+        panel.body_type.setCurrentIndex(panel.body_type.findData("kinematic"))
+        self.assertTrue(velocity.isEnabled())
+        self.assertTrue(acceleration.isEnabled())
+        velocity.setValue(2)
+        acceleration.setValue(.5)
+        panel.bounce.setValue(.75)
+        state.undo_stack.undo()
+        self.assertNotEqual(obj.restitution, .75)
+        state.undo_stack.redo()
+
+        panel.physics_resets["bounce"].click()
+        self.assertEqual(obj.restitution, obj.part.restitution)
+        panel.physics_resets["velocity"].click()
+        self.assertEqual(obj.velocity, list(obj.part.velocity))
+        panel.physics_resets["acceleration"].click()
+        self.assertEqual(obj.acceleration, [0, 0, 0])
+        for _ in range(3):
+            state.undo_stack.undo()
+
+        panel.physics_section.reset_button.click()
+        self.assertEqual(obj.body_type, obj.part.body_type)
+        self.assertEqual(obj.restitution, obj.part.restitution)
+        self.assertEqual(obj.velocity, list(obj.part.velocity))
+        self.assertEqual(obj.acceleration, [0, 0, 0])
+        state.undo_stack.undo()
+
+        self.assertTrue(self.window.saveFile(destination=source))
+        self.window.loadFile(source)
+        loaded = self.window.scene.objects[0]
+        self.assertEqual(loaded.body_type, "kinematic")
+        self.assertEqual(loaded.velocity, [2, 0, obj.part.velocity[2]])
+        self.assertEqual(loaded.acceleration, [.5, 0, 0])
+        self.assertEqual(loaded.restitution, .75)
+
     def test_upstream_scene_keeps_physics_after_panel_edits(self):
         source = self.folder / "upstream.simuO"
         mesh = str(ROOT / "Assets/aluminum_cube.simuOPart")
