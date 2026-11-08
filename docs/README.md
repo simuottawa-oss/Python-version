@@ -33,6 +33,13 @@ three vertices per triangle. The scene viewport uses these assets directly.
 Physics playback simulates a snapshot and uses its own viewport. The Part Editor
 has a separate 3D preview for its editable feature model.
 
+## Launch options
+
+Pass `--new` to start with an empty scene, `--part-editor` to open the Part
+Editor, or a path to a `.simuO` scene or `.simuOPart` file. Both `src/main.py`
+and the launchers accept these arguments. Set `SIMUO_PYTHON` to have a launcher
+use a different Python environment.
+
 ## Testing
 
 Run the suite from the repository root with the Python environment you installed:

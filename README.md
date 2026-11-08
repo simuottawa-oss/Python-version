@@ -23,6 +23,7 @@ py -3.12 -m venv .venv
 ```
 
 After setup, you can also double-click `Testing/Tools/run.bat`.
+Use a graphics driver with OpenGL 3.3 support.
 
 ## Linux Mint 22 setup
 
@@ -40,33 +41,44 @@ python3 -m venv .venv
 ./Testing/Tools/run.sh
 ```
 
-Use an X11 or XWayland session for camera controls.
+Use an X11 or XWayland session for camera controls and a graphics driver with
+OpenGL 3.3 support.
 
 ## macOS setup
 
-Use **Python 3.12** with Tcl/Tk. Install Xcode Command Line Tools
-(`xcode-select --install`) if the dependency installer needs a compiler.
+Use **Python 3.12** with Tcl/Tk and Xcode Command Line Tools
+(`xcode-select --install`). The install command includes a compiler flag for
+PyBullet, which can take a few minutes to build.
 
 ```bash
 python3.12 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip setuptools wheel
-.venv/bin/python -m pip install -r requirements.txt
+CFLAGS="-include stdio.h" .venv/bin/python -m pip install -r requirements.txt
 ./Testing/Tools/run.sh
 ```
 
 ## Run
 
-Use the launcher with no arguments for the startup menu, or pass `--new`,
-`--part-editor`, or a path to a scene or part. For example:
+In VS Code, select the project's `.venv` interpreter and run `src/main.py`.
+From a terminal, run the command for your OS from the repository root.
 
-```bash
-./Testing/Tools/run.sh --new
-./Testing/Tools/run.sh Assets/feature_demo.simuOPart
+### Windows (PowerShell)
+
+```powershell
+.\.venv\Scripts\python.exe src\main.py
 ```
 
-On Windows use `.\Testing\Tools\run.bat` with the same arguments. Set
-`SIMUO_PYTHON` to use a different environment. Windows and Linux need an OpenGL
-3.3 graphics driver.
+### macOS
+
+```bash
+.venv/bin/python src/main.py
+```
+
+### Linux
+
+```bash
+.venv/bin/python src/main.py
+```
 
 See the [developer guide](docs/README.md#testing) for tests and
 [executable builds](docs/README.md#build-an-executable).
