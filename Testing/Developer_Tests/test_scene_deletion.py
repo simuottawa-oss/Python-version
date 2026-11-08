@@ -17,13 +17,7 @@ from scene import SceneObject
 from simuO import SimuOMainWindow
 
 
-class Viewport(QWidget):
-    def __init__(self, parent=None, scene=None):
-        super().__init__(parent)
-        self.renderObjects = list(scene.objects)
-
-    def removeObject(self, obj):
-        self.renderObjects.remove(obj)
+from viewport_stub import ViewportStub as Viewport
 
 
 class SceneDeletionTests(unittest.TestCase):
@@ -81,7 +75,7 @@ class SceneDeletionTests(unittest.TestCase):
         message.assert_called_once()
         self.assertFalse(self.window.scene.dirty)
 
-    def test_temporary_part_is_released_only_after_its_last_instance(self):
+    def test_temporary_part_stays_available_to_undo_deletion(self):
         temporary = self.window.temporaryParts.create(self.source)
         first, second = self.add(), self.add()
         first.meshPath = second.meshPath = temporary
@@ -89,8 +83,10 @@ class SceneDeletionTests(unittest.TestCase):
         self.assertTrue(temporary.exists())
         self.assertTrue(self.window.temporaryParts.contains(temporary))
         self.window.deleteScenePart(second)
-        self.assertFalse(temporary.exists())
-        self.assertFalse(self.window.temporaryParts.sources)
+        self.assertEqual(self.window.active_temporary_parts(), [])
+        self.window.editor_state.undo_stack.undo()
+        self.assertTrue(temporary.exists())
+        self.assertEqual(self.window.active_temporary_parts(), [temporary])
         self.assertTrue(self.source.exists())
 
     def test_renderer_frees_only_the_selected_objects_buffers(self):

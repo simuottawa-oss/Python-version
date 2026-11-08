@@ -11,7 +11,8 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from PySide6.QtWidgets import QApplication, QMessageBox
 from PySide6.QtGui import QSurfaceFormat
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QPoint, QSettings, Qt, QTimer
+from PySide6.QtTest import QTest
 from simuO import SimuOMainWindow
 
 
@@ -35,7 +36,9 @@ def main():
         startup = folder / "startup.simuO"
         sample = ROOT / "Assets/aluminum_cube.simuOPart"
         startup.write_text(json.dumps({"version":1,"objects":[{"name":"Startup cube","meshPath":str(sample)}]}))
-        window = SimuOMainWindow(projectPath=startup)
+        settings = QSettings(str(folder / "layout.ini"), QSettings.IniFormat)
+        with patch("simuo.ui.docking.QSettings", return_value=settings):
+            window = SimuOMainWindow(projectPath=startup)
         window.show()
 
         def check():
@@ -57,6 +60,24 @@ def main():
                 print(f"PASS startup JSON part, shaders, camera framing, colored framebuffer ({cyan} cyan samples)",flush=True)
 
                 obj = window.scene.objects[0]
+                viewport = window.viewport
+                center = viewport.projection().point(obj.position)
+                QTest.mouseClick(viewport, Qt.LeftButton, pos=QPoint(round(center[0]), round(center[1])))
+                assert window.editor_state.selected_object is obj
+                hierarchy = window.panel_manager.docks["object_hierarchy"]
+                assert hierarchy.widget().state.selected_object is obj
+                window.toolActions["move"].trigger()
+                start = QPoint(round(center[0]), round(center[1]))
+                end = start + QPoint(30, 0)
+                position = list(obj.position)
+                QTest.mousePress(viewport, Qt.LeftButton, pos=start)
+                QTest.mouseMove(viewport, end)
+                QTest.mouseRelease(viewport, Qt.LeftButton, pos=end)
+                assert obj.position != position, "Move gizmo did not change the selected part"
+                window.undoAction.trigger()
+                assert obj.position == position
+                print("PASS viewport selection, hierarchy, move gizmo and undo on JSON part", flush=True)
+
                 obj.position = [1,2,3]
                 obj.rotation = [10,20,30]
                 obj.velocity = [2,3,4]

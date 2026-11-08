@@ -19,20 +19,7 @@ from temporary_parts import TemporaryParts
 OBJ = 'v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n'
 
 
-class Viewport(QWidget):
-    def __init__(self, parent, scene):
-        super().__init__(parent)
-        self.scene = scene
-        self.renderObjects = []
-
-    def addNewObject(self, obj):
-        self.renderObjects.append(obj)
-
-    def frameObject(self, obj):
-        pass
-
-    def clearRenderObjects(self):
-        self.renderObjects.clear()
+from viewport_stub import ViewportStub as Viewport
 
 
 class ObjImportTests(unittest.TestCase):

@@ -17,19 +17,7 @@ from scene import SceneObject
 from simuO import SimuOMainWindow
 
 
-class Viewport(QWidget):
-    def __init__(self, parent=None, scene=None):
-        super().__init__(parent)
-        self.renderObjects = list(scene.objects)
-
-    def clearRenderObjects(self):
-        self.renderObjects.clear()
-
-    def addNewObject(self, obj):
-        self.renderObjects.append(obj)
-
-    def frameObject(self, obj):
-        pass
+from viewport_stub import ViewportStub as Viewport
 
 
 class ProjectSafetyTests(unittest.TestCase):

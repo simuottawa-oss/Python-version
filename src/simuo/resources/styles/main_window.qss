@@ -1,0 +1,100 @@
+QMainWindow {
+    background-color: #2b2b2b;
+}
+
+QMainWindow::separator {
+    background-color: #202020;
+    width: 6px;
+    height: 6px;
+}
+
+QMainWindow::separator:hover {
+    background-color: #6685a3;
+}
+
+QDockWidget {
+    color: #e8e8e8;
+}
+
+QDockWidget::title {
+    background-color: #292929;
+    padding: 7px;
+}
+
+QWidget#editorPanel {
+    background-color: #303030;
+}
+
+QLineEdit {
+    color: #eeeeee;
+}
+
+QLineEdit {
+    background-color: #222222;
+    border: 1px solid #555555;
+    padding: 5px;
+}
+
+QMenuBar {
+    background-color: #222222;
+    color: #e8e8e8;
+}
+
+QMenuBar::item {
+    padding: 6px 12px;
+}
+
+QMenuBar::item:selected {
+    background-color: #3a3a3a;
+}
+
+QMenu {
+    background-color: #2b2b2b;
+    color: #eeeeee;
+}
+
+QMenu::item:selected {
+    background-color: #444444;
+}
+
+QDialog {
+    background-color: #2b2b2b;
+    color: white;
+}
+
+QLabel {
+    color: white;
+}
+
+QListWidget {
+    background-color: #222222;
+    color: white;
+    border: 1px solid #555555;
+}
+
+QListWidget::item {
+    padding: 7px;
+}
+
+QListWidget::item:selected {
+    background-color: #4a4a4a;
+}
+
+QPushButton {
+    background-color: #3a3a3a;
+    color: white;
+    border: 1px solid #666666;
+    padding: 7px;
+    border-radius: 3px;
+}
+
+QPushButton:hover {
+    background-color: #505050;
+}
+
+QDoubleSpinBox {
+    background-color: #222222;
+    color: white;
+    border: 1px solid #666666;
+    padding: 5px;
+}

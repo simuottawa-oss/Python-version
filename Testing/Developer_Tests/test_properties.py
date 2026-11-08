@@ -18,13 +18,7 @@ from physics_world import PhysicsWorld
 from properties_dialog import PropertiesDialog
 
 
-class Viewport(QWidget):
-    def __init__(self, parent, scene):
-        super().__init__(parent)
-    def update(self):
-        pass
-    def frameObject(self, obj):
-        pass
+from viewport_stub import ViewportStub as Viewport
 
 
 class PropertiesTests(unittest.TestCase):

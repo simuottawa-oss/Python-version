@@ -1486,7 +1486,11 @@ def run_part_editor(path=None):
         int: Qt event-loop exit code after the editor application finishes.
     """
     from feature_editor import FeaturePartEditor
-    app = QApplication.instance() or QApplication([])
+    from simuo.rendering.context import configure_opengl
+    app = QApplication.instance()
+    if app is None:
+        configure_opengl()
+        app = QApplication([])
     window = FeaturePartEditor(path)
     window.show()
     return app.exec()

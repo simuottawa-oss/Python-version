@@ -158,17 +158,17 @@ On Linux, verify the packaged startup screen and logo on an X11/XWayland desktop
 
 ## Controls
 
-Click **Properties** in the toolbar to choose a part. Check **Dynamic body** to let it move under physics, or uncheck it to keep it static. You can also edit **Bounce** (0–1) and starting **Velocity X/Y/Z** in m/s. Click **OK** to apply or **Cancel** to leave it unchanged. These values are saved with the scene for that object; the original part file stays intact. Open a new **Render** window to simulate the updated values. Dynamic legacy meshes use a convex collision hull (which fills concavities) and a default mass of 1 kg.
+Open **Edit → Physics Properties** to choose a part. Check **Dynamic body** to let it move under physics, or uncheck it to keep it static. You can also edit **Bounce** (0–1) and starting **Velocity X/Y/Z** in m/s. Click **OK** to apply or **Cancel** to leave it unchanged. These values are saved with the scene for that object; the original part file stays intact. Open a new **Render** window to simulate the updated values. Dynamic legacy meshes use a convex collision hull (which fills concavities) and a default mass of 1 kg.
 
-**Help → Controls** shows camera controls and keyboard shortcuts in the editor. The status bar also shows the basic camera controls. Use **Reposition** and **Set Rotation** in the toolbar to edit an object; unavailable toolbar tools are disabled.
+Use the [scene panels and viewport tools guide](Documentation/Frontend/scene_panels.md) for docking, selection, transforms, and shortcuts. **Help → Controls** is also available in the editor.
 
 **New Project**, **Open Project**, and closing the editor offer **Save**, **Discard**, or **Cancel** when there are unsaved changes. Cancelling or failing to save keeps your scene open. If a save fails, choose a writable folder and try again; the scene's previous project path is retained.
 
 - `W` / `S`: move forward / backward
 - `A` / `D`: move left / right
 - `Left` / `Right` arrows: turn the camera left / right (editor and physics window)
-- `Space` / `Ctrl`: move up / down
-- Left-click a part in the scene viewport to select it; drag a colored arrow to move it along that world axis. Moves are saved with the scene.
+- `Space` / `C`: move up / down in the editor. Physics playback uses `Space` / `Ctrl`.
+- Click a part to select it, then choose Move, Rotate, or Scale in the viewport toolbar. Changes are saved with the scene.
 - Hold the right mouse button and move the mouse: look around
 - `Esc`: close the editor
 

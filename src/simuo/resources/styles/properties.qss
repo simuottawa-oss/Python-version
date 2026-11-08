@@ -1,0 +1,33 @@
+QWidget#editorPanel { background: #292929; }
+QWidget#inspectorHeader { background: #323232; border-bottom: 1px solid #202020; }
+QLabel#inspectorHint { color: #a8a8a8; padding: 12px; }
+QLineEdit#objectName {
+    color: #eeeeee; background: #242424; border: 1px solid #454545;
+    border-radius: 3px; padding: 5px 7px; font-weight: 600;
+}
+QWidget#sectionHeader {
+    background: #343434;
+    border-top: 1px solid #424242; border-bottom: 1px solid #202020;
+}
+QPushButton#sectionToggle {
+    color: #dddddd; background: transparent; border: none;
+    border-radius: 0; padding: 4px 8px; text-align: left; font-weight: 600;
+}
+QPushButton#sectionToggle:hover { color: white; background: #3a3a3a; }
+QWidget#sectionBody { background: #292929; }
+QLabel { color: #c8c8c8; font-size: 11px; }
+QDoubleSpinBox {
+    color: #eeeeee; background: #1f1f1f; border: 1px solid #444444;
+    border-left: 3px solid #777777; border-radius: 3px;
+    padding: 4px 3px; font-size: 11px; min-height: 17px;
+}
+QDoubleSpinBox[axis="X"] { border-left-color: #c35a5a; }
+QDoubleSpinBox[axis="Y"] { border-left-color: #78a85a; }
+QDoubleSpinBox[axis="Z"] { border-left-color: #5b8ec2; }
+QDoubleSpinBox:focus { background: #303b48; border-color: #698db4; }
+QPushButton#inspectorReset {
+    color: #bbbbbb; background: #393939; border: 1px solid #4a4a4a;
+    border-radius: 3px; padding: 2px 5px; font-size: 11px;
+}
+QPushButton#inspectorReset:hover { color: white; background: #4b4b4b; }
+QScrollArea { border: none; background: #292929; }

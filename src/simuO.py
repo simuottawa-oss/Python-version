@@ -5,13 +5,15 @@ provides scene-editing dialogs for object positioning and rotation.
 """
 import sys
 from pathlib import Path
+from copy import copy
 import json
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QSurfaceFormat
+from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
-    QToolBar,
+    QLineEdit,
+    QAbstractSpinBox,
     QFileDialog,
     QDialog,
     QVBoxLayout,
@@ -28,7 +30,14 @@ from PySide6.QtWidgets import (
 
 from tkinter import filedialog
 from scene import Scene, SceneObject
-from renderer import OpenGLViewport
+from simuo.editor.state import EditorState
+from simuo.editor.project_metadata import read_groups, read_object_editor, write_group
+from simuo.rendering.context import configure_opengl
+from simuo.rendering.viewport import OpenGLViewport
+from simuo.ui.docking import PanelManager
+from simuo.ui.panel_registry import editor_panel_specs
+from simuo.ui.theme import load_stylesheet
+from simuo.ui.viewport_tools import create_viewport_tools
 from project_paths import resolve_mesh_path, stored_mesh_path
 from temporary_parts import TemporaryParts, atomic_write
 from properties_dialog import PropertiesDialog
@@ -58,6 +67,7 @@ class SimuOMainWindow(QMainWindow):
             scene = Scene()
 
         self.scene = scene
+        self.editor_state = EditorState(scene, self)
         self.renderWindows = []
         self.partWindows = []
         self.temporaryParts = TemporaryParts()
@@ -66,110 +76,47 @@ class SimuOMainWindow(QMainWindow):
 
         self.resize(1280, 800)
 
-        self.setStyleSheet(
-            """
-            QMainWindow {
-                background-color: #2b2b2b;
-            }
-
-            QMenuBar {
-                background-color: #222222;
-                color: #e8e8e8;
-            }
-
-            QMenuBar::item {
-                padding: 6px 12px;
-            }
-
-            QMenuBar::item:selected {
-                background-color: #3a3a3a;
-            }
-
-            QMenu {
-                background-color: #2b2b2b;
-                color: #eeeeee;
-            }
-
-            QMenu::item:selected {
-                background-color: #444444;
-            }
-
-            QToolBar {
-                background-color: #292929;
-                border: none;
-                spacing: 6px;
-                padding: 8px;
-            }
-
-            QToolButton {
-                color: white;
-                background-color: #343434;
-                border: 1px solid #666666;
-                border-radius: 3px;
-                min-width: 34px;
-                min-height: 34px;
-                font-size: 17px;
-            }
-
-            QToolButton:hover {
-                background-color: #484848;
-            }
-
-            QToolButton:checked {
-                background-color: #595959;
-            }
-
-            QDialog {
-                background-color: #2b2b2b;
-                color: white;
-            }
-
-            QLabel {
-                color: white;
-            }
-
-            QListWidget {
-                background-color: #222222;
-                color: white;
-                border: 1px solid #555555;
-            }
-
-            QListWidget::item {
-                padding: 7px;
-            }
-
-            QListWidget::item:selected {
-                background-color: #4a4a4a;
-            }
-
-            QPushButton {
-                background-color: #3a3a3a;
-                color: white;
-                border: 1px solid #666666;
-                padding: 7px;
-                border-radius: 3px;
-            }
-
-            QPushButton:hover {
-                background-color: #505050;
-            }
-
-            QDoubleSpinBox {
-                background-color: #222222;
-                color: white;
-                border: 1px solid #666666;
-                padding: 5px;
-            }
-            """
-        )
-
+        self.setStyleSheet(load_stylesheet("main_window"))
         self.createMenus()
-        self.createToolbar()
 
         self.viewport = OpenGLViewport(self, scene=self.scene)
+        self.viewport.setMinimumSize(320, 280)
 
         self.setCentralWidget(self.viewport)
+        self.createToolbar()
         self.createTemporaryPartsPanel()
+        self.viewport.object_picked.connect(self.onViewportPicked)
+        self.viewport.box_selection_requested.connect(self.editor_state.select_many)
+        self.viewport.transform_started.connect(self.editor_state.begin_transform)
+        self.viewport.transform_previewed.connect(self.editor_state.preview_transform)
+        self.viewport.transform_finished.connect(self.editor_state.finish_transform)
+        self.editor_state.transform_ended.connect(self.viewport.discard_transform)
+        self.editor_state.tool_changed.connect(self.viewport.set_tool)
+        self.editor_state.tool_options_changed.connect(self.viewport.set_tool_options)
+        self.editor_state.selection_set_changed.connect(self.viewport.set_selected_objects)
+        self.viewport.frame_requested.connect(self.editor_state.frame_selected)
+        self.viewport.frame_scene_requested.connect(self.editor_state.frame_scene)
+        self.viewport.escape_requested.connect(self.onViewportEscape)
+        self.editor_state.frame_requested.connect(self.viewport.frameObject)
+
+        self.panel_manager = PanelManager(self, self.viewMenu)
+        for spec in editor_panel_specs(self.editor_state):
+            self.panel_manager.register_panel(spec)
+        self.panel_manager.restore_layout()
+        # Give floating docks the same editing shortcuts as the main window.
+        for widget in (self, *self.panel_manager.docks.values()):
+            for action in self.edit_actions:
+                widget.addAction(action)
+        self.editor_state.object_changed.connect(self.onObjectChanged)
+        self.editor_state.objects_changed.connect(self.onObjectsChanged)
+        self.editor_state.dirty_changed.connect(self.updateWindowTitle)
+        self.editor_state.view_changed.connect(self.viewport.update)
+        self.editor_state.view_changed.connect(self.updateEditActions)
+        self.editor_state.selection_set_changed.connect(self.updateEditActions)
+        QApplication.instance().focusChanged.connect(self.updateEditActions)
+        self.updateEditActions()
+        self.updateWindowTitle()
+
         self.statusBar().showMessage(
             "Import Part to add a model · Right-drag to look · WASD to move · Help → Controls"
         )
@@ -183,6 +130,72 @@ class SimuOMainWindow(QMainWindow):
     # FILE OPERATIONS
     # ---------------------------------------------------------
 
+    def updateWindowTitle(self):
+        name = Path(self.projectPath).stem if self.projectPath is not None else "Untitled"
+        self.setWindowTitle(f"SimuO - {name}[*]")
+        self.setWindowModified(self.scene.dirty)
+        self.editor_state.set_scene_name("Untitled Scene" if self.projectPath is None else name)
+
+    def onObjectChanged(self, obj):
+        self.updateWindowTitle()
+        self.viewport.update()
+
+    def onObjectsChanged(self):
+        self.viewport.sync_scene_objects()
+        self.refreshTemporaryParts()
+        self.updateWindowTitle()
+
+    def onViewportPicked(self, identifier):
+        self.editor_state.select_from_viewport(identifier, self.viewport.pick_modifiers)
+
+    def onViewportEscape(self):
+        if self.editor_state.isolated_ids is not None:
+            self.editor_state.exit_isolation()
+        else:
+            self.close()
+
+    def updateEditActions(self, *args):
+        focus = QApplication.focusWidget()
+        typing = isinstance(focus, (QLineEdit, QAbstractSpinBox))
+        selected = bool(self.editor_state.selected_objects)
+        self.duplicateAction.setEnabled(selected and not typing)
+        self.deleteAction.setEnabled(selected and not typing)
+        self.selectAllAction.setEnabled(bool(self.scene.objects) and not typing)
+        self.groupAction.setEnabled(selected and not typing)
+        self.showSelectedAction.setEnabled(selected)
+        self.frameSelectedAction.setEnabled(any(obj.viewport_visible for obj in self.editor_state.selected_objects))
+        self.frameSceneAction.setEnabled(any(obj.viewport_visible and obj.meshPath is not None for obj in self.scene.objects))
+        self.isolateAction.setEnabled(selected or self.editor_state.isolated_ids is not None)
+        self.isolateAction.setChecked(self.editor_state.isolated_ids is not None)
+
+    def showSelectedInHierarchy(self):
+        dock = self.panel_manager.docks["object_hierarchy"]
+        dock.show()
+        dock.raise_()
+        dock.widget().show_selected()
+
+    def createGroupFromSelection(self):
+        dock = self.panel_manager.docks["object_hierarchy"]
+        dock.show()
+        dock.raise_()
+        dock.widget().create_group()
+
+    def selectAllObjects(self):
+        focus = QApplication.focusWidget()
+        hierarchy = self.panel_manager.docks["object_hierarchy"].widget()
+        if focus is hierarchy or (focus is not None and hierarchy.isAncestorOf(focus)):
+            self.editor_state.select_many(hierarchy.matching_ids())
+        elif focus is self.viewport:
+            self.editor_state.select_many(obj.identifier for obj in self.scene.objects
+                                          if obj.viewport_visible and not obj.viewport_locked)
+        else:
+            self.editor_state.select_many(obj.identifier for obj in self.scene.objects)
+
+    def historyStep(self, operation):
+        self.viewport.cancel_interaction()
+        self.editor_state.cancel_transform()
+        operation()
+
     def createTemporaryPartsPanel(self):
         """Create a hidden dock showing unsaved part copies and their temporary directory.
 
@@ -190,6 +203,7 @@ class SimuOMainWindow(QMainWindow):
             None. Adds its visibility action to the Window menu.
         """
         self.temporaryPartsDock = QDockWidget("Temporary parts", self)
+        self.temporaryPartsDock.setObjectName("temporaryPartsDock")
         panel = QWidget(self)
         layout = QVBoxLayout(panel)
         self.temporaryPartsDirectory = QLabel(panel)
@@ -203,6 +217,10 @@ class SimuOMainWindow(QMainWindow):
         self.windowMenu.addAction(self.temporaryPartsDock.toggleViewAction())
         self.temporaryPartsDock.hide()
 
+    def active_temporary_parts(self):
+        paths = {Path(obj.meshPath).resolve() for obj in self.scene.objects if obj.meshPath}
+        return [path for path in self.temporaryParts.sources if path in paths]
+
     def refreshTemporaryParts(self):
         """Repopulate temporary-part names and paths, showing the dock only when copies
         exist.
@@ -211,14 +229,15 @@ class SimuOMainWindow(QMainWindow):
             None. Updates panel contents and visibility.
         """
         self.temporaryPartsList.clear()
-        for path in self.temporaryParts.sources:
+        active_paths = self.active_temporary_parts()
+        for path in active_paths:
             self.temporaryPartsList.addItem(path.name)
             self.temporaryPartsList.item(self.temporaryPartsList.count()-1).setToolTip(str(path))
         self.temporaryPartsDirectory.setText(
             f"Unsaved parts are stored in:\n{self.temporaryParts.directory}\n\n"
             "Save the scene to choose permanent locations for these parts."
         )
-        self.temporaryPartsDock.setVisible(bool(self.temporaryParts.sources))
+        self.temporaryPartsDock.setVisible(bool(active_paths))
 
     def newPart(self):
         """Open an independent feature-based part editor and retain its window reference.
@@ -242,16 +261,15 @@ class SimuOMainWindow(QMainWindow):
         if not self.confirmUnsavedChanges("New Project"):
             return
 
-        self.scene.objects.clear()
-
         self.viewport.clearRenderObjects()
+        self.editor_state.replace_objects([])
         self.temporaryParts.cleanup()
         self.refreshTemporaryParts()
 
         self.projectPath = None
         self.scene.dirty = False
 
-        self.setWindowTitle("SimuO - Untitled")
+        self.updateWindowTitle()
 
         self.viewport.update()
         
@@ -290,7 +308,8 @@ class SimuOMainWindow(QMainWindow):
         ):
             sceneObject = SceneObject(
                 name=objectData["name"],
-                meshPath=resolve_mesh_path(objectData["meshPath"], path)
+                meshPath=resolve_mesh_path(objectData["meshPath"], path) if objectData.get("meshPath") else None,
+                identifier=objectData.get("id"),
             )
 
             position = objectData.get(
@@ -334,15 +353,13 @@ class SimuOMainWindow(QMainWindow):
             sceneObject.acceleration = list(objectData.get("acceleration", sceneObject.acceleration))
             sceneObject.angularVelocity = list(objectData.get("angularVelocity", sceneObject.angularVelocity))
 
+            read_object_editor(sceneObject, objectData)
             loadedObjects.append(sceneObject)
 
         # Resolve all model files before replacing the current scene.
         if uploadToGPU:
             self.viewport.clearRenderObjects()
-        self.scene.objects[:] = loadedObjects
-        if uploadToGPU:
-            for sceneObject in loadedObjects:
-                self.viewport.addNewObject(sceneObject)
+        self.editor_state.replace_objects(loadedObjects, *read_groups(data))
 
         if len(loadedObjects) == 1 and loadedObjects[0].part is not None:
             self.viewport.frameObject(loadedObjects[0])
@@ -352,9 +369,7 @@ class SimuOMainWindow(QMainWindow):
         )
         self.scene.dirty = False
 
-        self.setWindowTitle(
-            f"SimuO - {self.projectPath.stem}"
-        )
+        self.updateWindowTitle()
 
         if uploadToGPU:
             self.viewport.update()
@@ -454,8 +469,7 @@ class SimuOMainWindow(QMainWindow):
             QMessageBox.warning(self, "Cannot Import Part", str(error))
             return
 
-        self.scene.addObject(importedObject)
-        self.scene.dirty = True
+        self.editor_state.add_object(importedObject)
         self.refreshTemporaryParts()
         if importedObject.part is not None or temporaryPath is not None:
             self.viewport.frameObject(importedObject)
@@ -475,6 +489,7 @@ class SimuOMainWindow(QMainWindow):
             bool: True when saved; False on destination cancellation or reported
             filesystem failure.
         """
+        self.viewport.cancel_interaction()
         path = Path(destination) if destination is not None else self.projectPath
         if path is None:
             filePath, _ = QFileDialog.getSaveFileName(
@@ -521,18 +536,24 @@ class SimuOMainWindow(QMainWindow):
                 return False
             partPaths[source] = target
 
-        data = {"version": 1, "objects": []}
+        self.scene.normalize_hierarchy()
+        data = {"version": 1, "objects": [],
+                "groups": [write_group(group) for group in self.scene.groups],
+                "hierarchy_order": self.scene.root_order}
+
 
         for sceneObject in self.scene.objects:
             # Skip editor-only objects like the axis
-            if sceneObject.name == "Axis":
+            if sceneObject.name == "Axis" and sceneObject.asset is None:
                 continue
 
             objectData = {
+                "id": sceneObject.identifier,
                 "name": sceneObject.name,
+                "editor": {"visible": sceneObject.editor_visible, "selection_locked": sceneObject.selection_locked},
                 "meshPath": stored_mesh_path(
                     partPaths.get(Path(sceneObject.meshPath).resolve(), sceneObject.meshPath), path
-                ),
+                ) if sceneObject.meshPath is not None else None,
                 "position": list(sceneObject.position),
                 "rotation": list(sceneObject.rotation),
                 "scale": list(sceneObject.scale),
@@ -557,17 +578,17 @@ class SimuOMainWindow(QMainWindow):
             )
             return False
 
-        for sceneObject in self.scene.objects:
+        for sceneObject in self.editor_state.history_objects():
             source = Path(sceneObject.meshPath).resolve() if sceneObject.meshPath else None
             if source in partPaths:
                 sceneObject.meshPath = partPaths[source]
         for source in partPaths:
             self.temporaryParts.release(source)
         self.projectPath = path
-        self.scene.dirty = False
+        self.editor_state.mark_saved()
         self.refreshTemporaryParts()
 
-        self.setWindowTitle(f"SimuO - {self.projectPath.stem}")
+        self.updateWindowTitle()
 
         print("Saved project:", self.projectPath)
         return True
@@ -604,11 +625,12 @@ class SimuOMainWindow(QMainWindow):
             bool: True if clean, discarded, or successfully saved; False on cancellation
             or failed save.
         """
+        self.viewport.cancel_interaction()
         hasUnsavedObjects = self.projectPath is None and self.scene.sceneHasObjects()
-        if not (self.scene.dirty or hasUnsavedObjects or self.temporaryParts.sources):
+        if not (self.scene.dirty or hasUnsavedObjects or self.active_temporary_parts()):
             return True
         message = "Save changes to the current scene before continuing?"
-        if self.temporaryParts.sources:
+        if self.active_temporary_parts():
             message += "\n\nYou will also choose permanent locations for its temporary parts."
         answer = QMessageBox.question(
             self, title, message,
@@ -648,6 +670,7 @@ class SimuOMainWindow(QMainWindow):
         for window in list(self.renderWindows):
             window.close()
         self.temporaryParts.cleanup()
+        self.panel_manager.save_layout()
         event.accept()
 
     # ---------------------------------------------------------
@@ -797,8 +820,7 @@ class SimuOMainWindow(QMainWindow):
             y = yInput.value()
             z = zInput.value()
 
-            sceneObject.setRotation(x, y, z)
-            self.scene.dirty = True
+            self.editor_state._edit("Change Rotation", [(sceneObject, "rotation", [x, y, z])])
 
             print(f"Rotated {sceneObject.name} to ({x}, {y}, {z})")
 
@@ -959,8 +981,7 @@ class SimuOMainWindow(QMainWindow):
             y = yInput.value()
             z = zInput.value()
 
-            sceneObject.setPosition(x, y, z)
-            self.scene.dirty = True
+            self.editor_state._edit("Change Position", [(sceneObject, "position", [x, y, z])])
 
             print(f"Moved {sceneObject.name} to ({x}, {y}, {z})")
 
@@ -987,6 +1008,47 @@ class SimuOMainWindow(QMainWindow):
             None. Stores menu/action references used elsewhere by the window.
         """
         fileMenu = self.menuBar().addMenu("File")
+
+        self.editMenu = self.menuBar().addMenu("Edit")
+        stack = self.editor_state.undo_stack
+        self.undoAction = stack.createUndoAction(self, "Undo")
+        self.redoAction = stack.createRedoAction(self, "Redo")
+        for action, operation in ((self.undoAction, stack.undo), (self.redoAction, stack.redo)):
+            action.triggered.disconnect()
+            action.triggered.connect(lambda checked=False, operation=operation: self.historyStep(operation))
+        self.undoAction.setShortcuts(QKeySequence.keyBindings(QKeySequence.StandardKey.Undo))
+        self.redoAction.setShortcuts(QKeySequence.keyBindings(QKeySequence.StandardKey.Redo))
+        self.duplicateAction = QAction("Duplicate", self)
+        self.duplicateAction.setShortcut(QKeySequence("Ctrl+D"))
+        self.duplicateAction.triggered.connect(self.editor_state.duplicate_selected)
+        self.deleteAction = QAction("Delete", self)
+        self.deleteAction.setShortcuts([QKeySequence("Delete"), QKeySequence("Backspace")])
+        self.deleteAction.triggered.connect(self.editor_state.delete_selected)
+        self.selectAllAction = QAction("Select All", self)
+        self.selectAllAction.setShortcuts(QKeySequence.keyBindings(QKeySequence.StandardKey.SelectAll))
+        self.selectAllAction.triggered.connect(self.selectAllObjects)
+        self.groupAction = QAction("Group Selection", self)
+        self.groupAction.setShortcut(QKeySequence("Ctrl+G"))
+        self.groupAction.triggered.connect(self.createGroupFromSelection)
+        self.edit_actions = (self.undoAction, self.redoAction, self.duplicateAction,
+                             self.deleteAction, self.selectAllAction, self.groupAction)
+        for action in self.edit_actions:
+            action.setShortcutContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        self.editMenu.addActions([self.undoAction, self.redoAction])
+        self.editMenu.addSeparator()
+        self.editMenu.addActions([self.duplicateAction, self.deleteAction, self.selectAllAction, self.groupAction])
+
+        self.viewMenu = self.menuBar().addMenu("View")
+        self.toolsVisibleAction = self.viewMenu.addAction("Viewport Tools")
+        self.toolsVisibleAction.setCheckable(True)
+        self.toolsVisibleAction.setChecked(True)
+        self.frameSelectedAction = self.viewMenu.addAction("Frame Selected", self.editor_state.frame_selected)
+        self.frameSceneAction = self.viewMenu.addAction("Frame Scene", self.editor_state.frame_scene)
+        self.showSelectedAction = self.viewMenu.addAction("Show Selected in Hierarchy", self.showSelectedInHierarchy)
+        self.isolateAction = self.viewMenu.addAction("Isolate Selected")
+        self.isolateAction.setCheckable(True)
+        self.isolateAction.triggered.connect(lambda checked: self.editor_state.isolate_selected() if checked else self.editor_state.exit_isolation())
+        self.viewMenu.addSeparator()
 
         self.renderAction = QAction("Render", self)
         self.renderAction.setShortcut("Ctrl+R")
@@ -1059,63 +1121,22 @@ class SimuOMainWindow(QMainWindow):
         QMessageBox.information(
             self, "SimuO Controls",
             "Import Part adds a model. Save stores your scene and its model references.\n\n"
-            "Camera: W/S forward/back, A/D left/right, Space/Ctrl up/down.\n"
+            "Camera: W/S forward/back, A/D left/right, Space/C up/down.\n"
             "Left/Right arrows turn the camera left/right.\n"
             "Hold the right mouse button and move the mouse to look around.\n"
             "Esc closes the editor after checking for unsaved changes.\n\n"
-            "Use Reposition, Set Rotation, or Properties in the toolbar to edit an object.\n"
+            "Select a part and use the viewport tools or Properties panel. Use Edit → Physics Properties for motion and bounce.\n"
             "File → New → Scene / Part creates a scene or part.\n"
             "Ctrl+N: New Scene · Ctrl+O: Open Project · Ctrl+S: Save · Ctrl+Shift+S: Save As",
         )
 
     def createToolbar(self):
-
-        """Build scene tools, disable unavailable operations, and add Properties/Delete
-        Part actions.
-
-        Returns:
-            None. Stores tool action references for selection state.
-        """
-        toolbar = QToolBar("Tools", self)
-
-        toolbar.setMovable(False)
-
-        self.addToolBar(Qt.LeftToolBarArea, toolbar)
-
-        self.toolActions = []
-
-        tools = [
-            ("Select", "➤"),
-            ("Reposition", "⇄"),
-            ("Set Rotation", "⤾"),
-            ("Pan", "✋"),
-            ("Rotate", "⟳"),
-            ("Move", "✥"),
-        ]
-
-        for name, symbol in tools:
-            action = QAction(symbol, self)
-
-            implemented = name in ("Reposition", "Set Rotation")
-            action.setToolTip(name if implemented else f"{name} — unavailable")
-            action.setEnabled(implemented)
-            action.setCheckable(implemented)
-
-            action.triggered.connect(lambda checked, n=name: self.toolSelected(n))
-
-            toolbar.addAction(action)
-
-            self.toolActions.append(action)
-
-        toolbar.addSeparator()
-        self.propertiesAction = QAction("Properties", self)
-        self.propertiesAction.setToolTip("Edit dynamic/static behavior, bounce and starting velocity")
-        self.propertiesAction.triggered.connect(self.openPropertiesObjectList)
-        toolbar.addAction(self.propertiesAction)
-        self.deletePartAction = QAction("Delete Part", self)
-        self.deletePartAction.setToolTip("Choose a part to remove from this scene")
-        self.deletePartAction.triggered.connect(self.openDeletePartDialog)
-        toolbar.addAction(self.deletePartAction)
+        self.viewport_tools, self.toolActions = create_viewport_tools(
+            self.viewport, self.editor_state, self.toolsVisibleAction,
+        )
+        self.editMenu.addSeparator()
+        self.propertiesAction = self.editMenu.addAction("Physics Properties…", self.openPropertiesObjectList)
+        self.deletePartAction = self.editMenu.addAction("Delete Part…", self.openDeletePartDialog)
 
     def openDeletePartDialog(self):
         """Prompt for a non-axis object to remove, then delegate accepted deletion.
@@ -1123,7 +1144,7 @@ class SimuOMainWindow(QMainWindow):
         Returns:
             None. Displays guidance when the scene has no removable parts.
         """
-        objects = [obj for obj in self.scene.objects if obj.name != "Axis"]
+        objects = [obj for obj in self.scene.objects if obj.name != "Axis" or obj.asset is not None]
         if not objects:
             QMessageBox.information(self, "Delete Part", "There are no parts to delete.")
             return
@@ -1147,8 +1168,7 @@ class SimuOMainWindow(QMainWindow):
             self.deleteScenePart(objects[objectList.currentRow()])
 
     def deleteScenePart(self, sceneObject):
-        """Remove one non-axis instance and its GPU resources; release a temporary copy
-        only when no remaining object references it.
+        """Remove a scene instance through the same history as hierarchy deletion.
 
         Args:
             sceneObject (SceneObject): Instance to display, remove, or edit.
@@ -1157,18 +1177,9 @@ class SimuOMainWindow(QMainWindow):
             None. Marks dirty and refreshes temporary-part/status UI; unknown instances
             are ignored.
         """
-        if sceneObject not in self.scene.objects or sceneObject.name == "Axis":
+        if sceneObject not in self.scene.objects or (sceneObject.name == "Axis" and sceneObject.asset is None):
             return
-        self.viewport.removeObject(sceneObject)
-        self.scene.objects.remove(sceneObject)
-        self.scene.dirty = True
-        path = sceneObject.meshPath
-        if self.temporaryParts.contains(path) and not any(
-            obj.meshPath is not None and Path(obj.meshPath).resolve() == Path(path).resolve()
-            for obj in self.scene.objects
-        ):
-            self.temporaryParts.release(path)
-        self.refreshTemporaryParts()
+        self.editor_state.delete_objects((sceneObject.identifier,))
         self.statusBar().showMessage(f"Removed {sceneObject.name} from the scene", 5000)
 
     def openPropertiesObjectList(self):
@@ -1178,7 +1189,7 @@ class SimuOMainWindow(QMainWindow):
         Returns:
             None. Displays guidance if no editable objects exist.
         """
-        objects = [obj for obj in self.scene.objects if obj.name != "Axis"]
+        objects = [obj for obj in self.scene.objects if obj.name != "Axis" or obj.asset is not None]
         if not objects:
             QMessageBox.information(self, "Properties", "Import a part before editing its properties.")
             return
@@ -1219,9 +1230,12 @@ class SimuOMainWindow(QMainWindow):
         body_type = "dynamic" if dialog.dynamic.isChecked() else "static"
         if (bounce != sceneObject.restitution or velocity != sceneObject.velocity
                 or body_type != sceneObject.body_type):
-            sceneObject.setPhysicsProperties(bounce, velocity, body_type)
-            self.scene.dirty = True
-            self.viewport.update()
+            updated = copy(sceneObject)
+            updated.setPhysicsProperties(bounce, velocity, body_type)
+            self.editor_state._edit("Change Physics Properties", [
+                (sceneObject, field, getattr(updated, field))
+                for field in ("_restitution", "_body_type", "velocity")
+            ])
 
     def openPhysicsRender(self):
         """Open and retain an independent live simulation window for the current scene.
@@ -1246,32 +1260,6 @@ class SimuOMainWindow(QMainWindow):
         self.renderWindows.append(window)
         window.destroyed.connect(lambda: self.renderWindows.remove(window) if window in self.renderWindows else None)
         window.show()
-
-
-    def toolSelected(self, name):
-
-        """Update toolbar checks and dispatch a selected implemented tool to its object
-        picker.
-
-        Args:
-            name (str): Toolbar tool name; Reposition and Set Rotation have implemented
-                dialogs.
-
-        Returns:
-            None. Opens position or rotation controls for those tool names.
-        """
-        sender = self.sender()
-
-        for action in self.toolActions:
-            action.setChecked(action is sender)
-
-        print("Selected tool:", name)
-
-        if name == "Reposition":
-            self.openRepositionObjectList()
-
-        if name == "Set Rotation":
-            self.openSetRotationObjectList()
 
 
 class App:
@@ -1309,15 +1297,7 @@ class App:
             int: Qt exit code, or 0 when an existing application already owns the event
             loop.
         """
-        surfaceFormat = QSurfaceFormat()
-
-        surfaceFormat.setVersion(3, 3)
-
-        surfaceFormat.setProfile(QSurfaceFormat.CoreProfile)
-
-        surfaceFormat.setDepthBufferSize(24)
-
-        QSurfaceFormat.setDefaultFormat(surfaceFormat)
+        configure_opengl()
 
         app = QApplication.instance()
 
