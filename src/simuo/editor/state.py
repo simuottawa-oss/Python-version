@@ -8,7 +8,7 @@ from uuid import uuid4
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QUndoStack
 
-from scene import SceneGroup
+from simuo.project.scene import SceneGroup
 from simuo.editor.commands import ObjectEdit, SceneEdit
 
 
