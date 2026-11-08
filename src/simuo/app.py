@@ -6,6 +6,7 @@ one, then launches the main window.
 
 import argparse
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -122,6 +123,19 @@ def main():
         action, filepath = "new", None
     else:
         action, filepath = startup_menu()
+        if action is not None and sys.platform == "darwin":
+            # Tk and Qt both install Cocoa application delegates. Start the
+            # editor in a fresh process after the Tk chooser has closed.
+            command = [sys.executable]
+            if not getattr(sys, "frozen", False):
+                command.append(sys.argv[0])
+            if action in ("new_part", "open_part"):
+                command.append("--part-editor")
+            elif action == "new":
+                command.append("--new")
+            if filepath is not None:
+                command.extend(("--", str(filepath)))
+            return subprocess.run(command, check=False).returncode
 
     if action is None:
         return
