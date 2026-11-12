@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QHBoxLayout, 
 from simuo.parts.part_document import new_document, open_document, save_document
 from simuo.parts.sketch_geometry import Sketch
 from simuo.parts.part_export import export_sketch
+from simuo.ui.recent_projects import remember_project, record_saved_project
 
 
 class ConstraintList(QListWidget):
@@ -1378,6 +1379,7 @@ class PartEditor(QMainWindow):
         self.canvas.selection = -1
         self.refresh()
         self.canvas.fit()
+        remember_project(self.path)
         return True
 
     def save(self):
@@ -1460,6 +1462,7 @@ class PartEditor(QMainWindow):
         self.path,self.data,self.dirty = Path(path),data,False
         self.refresh()
         self.statusBar().showMessage(f"Saved {path}",6000)
+        record_saved_project(self.path, self.canvas)
         return True
 
     def closeEvent(self,event):

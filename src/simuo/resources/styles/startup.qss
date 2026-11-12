@@ -1,0 +1,260 @@
+QDialog#startupDialog {
+    background-color: #1f1f1f;
+}
+
+QFrame#actionPanel {
+    background-color: #252525;
+    border-right: 1px solid #343434;
+}
+
+QWidget#welcomePanel {
+    background-color: #1f1f1f;
+}
+
+QLabel#brand {
+    color: #f2f2f2;
+    font-size: 36px;
+    font-weight: 700;
+}
+
+QLabel#sectionHeading {
+    color: #8b8b8b;
+    font-size: 11px;
+    letter-spacing: 1px;
+    padding: 6px 2px 2px 2px;
+}
+
+QPushButton#startupAction {
+    background-color: transparent;
+    color: #f5f5f5;
+    border: none;
+    border-left: 3px solid #d64565;
+    border-radius: 3px;
+    padding: 11px 3px;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: left;
+}
+
+QPushButton#startupAction:hover {
+    background-color: #1f1f1f;
+}
+
+QPushButton#startupAction:pressed {
+    background-color: #333333;
+}
+
+
+QPushButton#menuButton {
+    background-color: #d64565;
+    color: #f5f5f5;
+    border: none;
+    border-radius: 6px;
+    padding: 9px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: left;
+}
+
+QPushButton#menuButton:hover {
+    background-color: #b6556a;
+}
+
+QPushButton#menuButton:pressed {
+    background-color: #ce2f51;
+}
+
+QLabel#Title {
+    color: #f2f2f2;
+    font-size: 34px;
+    font-weight: 700;
+}
+
+
+QLabel#menuTitle {
+    color: #f2f2f2;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+QLabel#welcomeSubtitle {
+    color: #9c9c9c;
+    font-size: 15px;
+    padding-top: 3px;
+}
+
+QLabel#hint {
+    color: #777777;
+    font-size: 11px;
+}
+
+QMenu {
+    background-color: #292929;
+    color: #f5f5f5;
+    border: 1px solid #555555;
+    padding: 5px;
+}
+
+QMenu::item {
+    padding: 8px 24px;
+    border-radius: 4px;
+}
+
+QMenu::item:selected {
+    background-color: #525252;
+}
+
+
+QFrame#actionSeparator {
+    background-color: #484848;
+    border: none;
+}
+
+
+QWidget#recentProjectsPanel {
+    background-color: #1f1f1f;
+}
+
+QLabel#emptyIconTile {
+    background-color: #29292d;
+    border-radius: 20px;
+}
+
+QLabel#emptyTitle {
+    color: #f2f2f2;
+    font-size: 22px;
+    font-weight: 700;
+    margin-top: 8px;
+}
+
+QLabel#emptyDescription {
+    color: #9c9c9c;
+    font-size: 15px;
+    line-height: 1.4;
+}
+
+QPushButton#emptyAction {
+    background-color: #f4f4f5;
+    color: #18181a;
+    border: none;
+    border-radius: 23px;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+QPushButton#emptyAction:hover {
+    background-color: #ffffff;
+}
+
+QPushButton#emptyAction:pressed {
+    background-color: #d8d8da;
+    padding-top: 2px;
+}
+
+QToolButton#sceneTypeCard {
+    background-color: #222222;
+    border: 1px solid #444444;
+    border-radius: 14px;
+    padding: 0;
+}
+
+QToolButton#sceneTypeCard:checked,
+QToolButton#sceneTypeCard:focus {
+    border: 1px solid #d64565;
+}
+
+QToolButton#sceneTypeCard:hover {
+    border-color: #d64565;
+}
+
+QToolButton#sceneTypeCard:disabled {
+    background-color: #202020;
+    border: 1px dashed #555555;
+}
+
+QToolButton#sceneTypeCard:disabled QLabel#menuTitle {
+    color: #939393;
+}
+
+QToolButton#sceneTypeCard:disabled QLabel#welcomeSubtitle {
+    color: #808080;
+}
+
+QLabel#comingSoonBadge {
+    background-color: #393039;
+    color: #f0c4ce;
+    border: 1px solid #76515d;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+QScrollArea#recentProjectsScroll,
+QWidget#recentProjectsGrid {
+    background-color: #1f1f1f;
+    border: none;
+}
+
+QToolButton#recentProjectCard {
+    background-color: #252525;
+    border: 1px solid #444444;
+    border-radius: 14px;
+    padding: 0;
+}
+
+QToolButton#recentProjectCard:hover,
+QToolButton#recentProjectCard:focus {
+    border-color: #d64565;
+    background-color: #2b2528;
+}
+
+QToolButton#recentProjectCard:pressed {
+    background-color: #34262c;
+}
+
+QLabel#recentProjectKind {
+    color: #d64565;
+    font-size: 11px;
+    font-weight: 700;
+    background: transparent;
+}
+
+QLabel#recentProjectName {
+    color: #f2f2f2;
+    font-size: 20px;
+    font-weight: 700;
+    background: transparent;
+}
+
+QLabel#recentProjectDescription {
+    color: #a0a0a0;
+    font-size: 13px;
+    background: transparent;
+}
+
+QLabel#recentPreviewHint {
+    color: #929292;
+    font-size: 11px;
+    background: transparent;
+}
+
+QToolButton#recentProjectOptions {
+    background: transparent;
+    color: #999999;
+    border: none;
+    border-radius: 4px;
+    padding: 0;
+    font-size: 12px;
+}
+
+QToolButton#recentProjectOptions:hover,
+QToolButton#recentProjectOptions:focus {
+    background-color: #3a3a3a;
+    color: #f2f2f2;
+}
+
+QToolButton#recentProjectOptions::menu-indicator {
+    image: none;
+}

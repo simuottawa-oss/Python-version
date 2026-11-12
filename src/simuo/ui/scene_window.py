@@ -27,13 +27,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from tkinter import filedialog
 from simuo.project.scene import Scene, SceneObject
 from simuo.editor.state import EditorState
 from simuo.project.editor_metadata import read_groups, read_object_editor, write_group
 from simuo.rendering.context import configure_opengl
 from simuo.rendering.viewport import OpenGLViewport
 from simuo.ui.docking import PanelManager
+from simuo.ui.recent_projects import remember_project, record_saved_project
 from simuo.ui.panel_registry import editor_panel_specs
 from simuo.ui.theme import load_stylesheet
 from simuo.ui.viewport_tools import create_viewport_tools
@@ -373,6 +373,8 @@ class SimuOMainWindow(QMainWindow):
         if uploadToGPU:
             self.viewport.update()
 
+        remember_project(path)
+
         print(
             "Opened project:",
             path
@@ -590,6 +592,7 @@ class SimuOMainWindow(QMainWindow):
         self.updateWindowTitle()
 
         print("Saved project:", self.projectPath)
+        record_saved_project(self.projectPath, self.viewport)
         return True
 
     def saveAsFile(self):
@@ -1277,24 +1280,30 @@ class App:
         if self.scene is None:
             self.scene = Scene()
 
-    def run(self):
+    def run(self, start_event_loop=None):
 
         # Must be configured before QApplication is created.
-        """Configure an OpenGL 3.3 core surface, create/show the scene editor, and run Qt
-        only if this App owns QApplication.
+        """Configure OpenGL, create/show the editor, and optionally run Qt's event loop.
+
+        Args:
+            start_event_loop (bool, optional): Enter ``QApplication.exec`` when true.
+                By default this happens only when this method creates the application,
+                which keeps the class usable from an existing Qt event loop.
 
         Returns:
-            int: Qt exit code, or 0 when an existing application already owns the event
-            loop.
+            int: Qt exit code, or 0 when a caller-owned event loop remains responsible.
         """
         configure_opengl()
 
         app = QApplication.instance()
 
-        ownsApp = app is None
+        owns_app = app is None
 
         if app is None:
             app = QApplication(sys.argv)
+
+        if start_event_loop is None:
+            start_event_loop = owns_app
 
 
 
@@ -1302,7 +1311,6 @@ class App:
 
         self.window.show()
 
-        if ownsApp:
+        if start_event_loop:
             return app.exec()
-
         return 0

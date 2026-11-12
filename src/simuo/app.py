@@ -14,23 +14,26 @@ from pathlib import Path
 if sys.platform.startswith("linux") and os.environ.get("DISPLAY"):
     os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
 
-import customtkinter as ctk
+from PySide6.QtWidgets import QApplication
 from simuo.ui.startup import showStartMenu
 from simuo.ui.scene_window import App
 from simuo.resources.paths import resource_path
-
+from simuo.rendering.context import configure_opengl
+from PySide6.QtGui import QIcon
 
 def startup_menu():
-    """Run the modal Tk startup chooser and destroy its hidden root after selection or
-    closure.
+    """Run the modal Qt startup chooser and return the selected action.
 
     Returns:
         tuple: (action, filepath), with None values when no action/path was chosen.
     """
-    root = ctk.CTk()
-
-    root.withdraw()
-
+    # The surface format has to be selected before the first QApplication is made,
+    # including when the first window happens to be this non-OpenGL dialog.
+    configure_opengl()
+    qt_app = QApplication.instance() or QApplication(sys.argv)
+    qt_app.setWindowIcon(
+        QIcon(str(resource_path("Images", "simuo_logo.png")))
+    )
     startup = {
         "action": None,
         "filepath": None
@@ -80,7 +83,7 @@ def startup_menu():
     logo_path = resource_path("Images", "simuo_logo.png")
 
     menu = showStartMenu(
-        parent=root,
+        parent=None,
         logo_path=logo_path,
         on_new=new_project,
         on_import=import_project,
@@ -88,10 +91,14 @@ def startup_menu():
         on_open_part=open_part,
     )
 
-    # Wait until the startup menu closes.
-    root.wait_window(menu)
-
-    root.destroy()
+    # Keep closing the chooser from scheduling an application quit before the selected
+    # editor window has been created.
+    quit_on_close = qt_app.quitOnLastWindowClosed()
+    qt_app.setQuitOnLastWindowClosed(False)
+    try:
+        menu.exec()
+    finally:
+        qt_app.setQuitOnLastWindowClosed(quit_on_close)
 
     return (
         startup["action"],
@@ -139,4 +146,6 @@ def main():
         print("Opening project:", filepath)
 
         app = App(projectPath=filepath)
-    return app.run()
+    # This is the top-level launcher even when the startup dialog already created the
+    # QApplication, so the editor must now enter the main Qt event loop.
+    return app.run(start_event_loop=True)

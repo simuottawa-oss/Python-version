@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (QDockWidget, QTreeWidget, QTreeWidgetItem, QStack
     QMessageBox, QFileDialog, QToolBar, QLabel)
 
 from simuo.ui.parts.part_editor import PartEditor
+from simuo.ui.recent_projects import remember_project, record_saved_project
 from simuo.ui.parts.part_viewport import PartViewport
 from simuo.parts.feature_document import new_feature_document,open_feature_document,save_feature_document
 from simuo.parts.feature_geometry import FeatureModel,PLANES,support_frame,to_plane
@@ -867,6 +868,7 @@ class FeaturePartEditor(PartEditor):
         self.view_model()
         self.refresh()
         self.viewport.fit()
+        remember_project(self.path)
         return True
 
     def _save_to(self,path):
@@ -886,6 +888,7 @@ class FeaturePartEditor(PartEditor):
             return False
         self.data,self.path,self.dirty = data,Path(path),False
         self.refresh()
+        record_saved_project(self.path, self.stack.currentWidget())
         return True
 
     def export_mesh(self,kind):
