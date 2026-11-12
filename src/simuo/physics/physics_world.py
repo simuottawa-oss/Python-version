@@ -65,6 +65,8 @@ def state_vector(value, label, positive=False):
 
 class PhysicsWorld:
     dt = 1/240
+    history_interval = 60
+    history_limit = 32
 
     def __init__(self, source_scene, gravity=-9.81, floor=True):
         # Lazy import keeps editing and saving available without the solver.
@@ -96,6 +98,8 @@ class PhysicsWorld:
         self.masses = []
         self.legacy_count = 0
         self.steps = 0
+        self._history = {}
+        self._history_start = 0
         try:
             for source in source_scene.objects:
                 if source.asset is None:
@@ -107,6 +111,7 @@ class PhysicsWorld:
                 self.initial.append({name: list(getattr(obj,name)) for name in
                                      ("position", "rotation", "velocity", "angularVelocity", "acceleration")})
             self._build()
+            self._start_history()
         except BaseException:
             self.close()
             raise
@@ -206,8 +211,63 @@ class PhysicsWorld:
         """
         if not math.isfinite(value):
             raise ValueError("Gravity must be finite")
+        changed = value != self.gravity
         self.gravity = value
         self.bullet.setGravity(0,value,0,physicsClientId=self.client)
+        if changed:
+            self._start_history()
+
+    @property
+    def can_step_back(self):
+        return self.steps > self._history_start
+
+    def _clear_history(self):
+        for state_id, _ in self._history.values():
+            self.bullet.removeState(state_id, physicsClientId=self.client)
+        self._history.clear()
+
+    def _start_history(self):
+        """Anchor a new timeline at the current state after settings changes."""
+        self._clear_history()
+        self._history_start = self.steps
+        self._save_checkpoint()
+
+    def _save_checkpoint(self):
+        """Keep the timeline anchor and a bounded set of recent solver snapshots."""
+        state_id = self.bullet.saveState(physicsClientId=self.client)
+        states = [{name: list(getattr(obj, name)) for name in
+                   ("position", "rotation", "velocity", "angularVelocity", "acceleration")}
+                  for obj in self.scene.objects]
+        self._history[self.steps] = state_id, states
+        if len(self._history) > self.history_limit + 1:
+            oldest = next(step for step in self._history if step != self._history_start)
+            removed, _ = self._history.pop(oldest)
+            self.bullet.removeState(removed, physicsClientId=self.client)
+
+    def step_back(self):
+        """Restore one fixed step earlier, replaying from the closest saved checkpoint.
+
+        Solver state includes contacts and velocities. Python state is also restored
+        because kinematic motion is advanced outside Bullet. Older history remains
+        accessible from the anchor even after recent checkpoints are evicted.
+        """
+        if not self.can_step_back:
+            return False
+        target = self.steps - 1
+        checkpoint = max(step for step in self._history if step <= target)
+        state_id, states = self._history[checkpoint]
+        self.bullet.restoreState(stateId=state_id, physicsClientId=self.client)
+        for obj, state in zip(self.scene.objects, states):
+            for name, value in state.items():
+                setattr(obj, name, list(value))
+        self.steps = checkpoint
+        for step in list(self._history):
+            if step > target:
+                removed, _ = self._history.pop(step)
+                self.bullet.removeState(removed, physicsClientId=self.client)
+        if target > checkpoint:
+            self.step(target - checkpoint)
+        return True
 
     def step(self, count=1):
         """Advance fixed 1/240-second steps, applying per-object acceleration forces, then
@@ -231,6 +291,9 @@ class PhysicsWorld:
                                          b.WORLD_FRAME,physicsClientId=client)
             b.stepSimulation(physicsClientId=client)
             self.steps += 1
+            if (self.steps - self._history_start) % self.history_interval == 0:
+                self.sync()
+                self._save_checkpoint()
         self.sync()
 
     def _advance_kinematic(self, obj, body):
@@ -272,6 +335,7 @@ class PhysicsWorld:
         """
         b, client = self.bullet, self.client
         # Recreate contact manifolds as well as poses for repeatable playback.
+        self._clear_history()
         b.resetSimulation(physicsClientId=client)
         self.bodies.clear()
         self.masses.clear()
@@ -281,6 +345,7 @@ class PhysicsWorld:
             for name, value in state.items():
                 setattr(obj,name,list(value))
         self._build()
+        self._start_history()
 
     def close(self):
         """Disconnect this world's Bullet client if still connected.
@@ -289,5 +354,6 @@ class PhysicsWorld:
             None. Marks the client closed; repeated calls are harmless.
         """
         if self.client >= 0:
+            self._clear_history()
             self.bullet.disconnect(physicsClientId=self.client)
             self.client = -1
