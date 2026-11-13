@@ -28,3 +28,7 @@ jobs:
           python -m pip check
       - name: Unit and integration tests
         run: python -m unittest discover -s tests -t . -v
+      - name: Build executable and exercise spawned structural workers
+        run: |
+          python -m PyInstaller --noconfirm src/main.spec
+          dist/SimuO --structural-smoke

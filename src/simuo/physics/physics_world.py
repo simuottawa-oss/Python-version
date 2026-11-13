@@ -151,7 +151,8 @@ class PhysicsWorld:
                     }
                     shape = b.createCollisionShape(b.GEOM_MESH,vertices=mesh.tolist(),meshScale=obj.scale,
                                                   physicsClientId=client,**options)
-                mass = part.mass * (float(np.prod(scale)) if part.mass_source == "density" else 1)
+                density = obj.material.density or part.density
+                mass = (density * part.volume * float(np.prod(scale)) if part.mass_source == "density" else part.mass)
                 if not dynamic:
                     mass = 0
                 friction = part.friction

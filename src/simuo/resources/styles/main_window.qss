@@ -98,3 +98,29 @@ QDialog QDoubleSpinBox {
     border: 1px solid #666666;
     padding: 5px;
 }
+
+/* Structural panels reuse the editor palette for standard Qt tree/tab widgets. */
+QTreeWidget#analysisHierarchy {
+    background: #292929; color: #dddddd; border: none; outline: none;
+}
+QTreeWidget#analysisHierarchy::item { padding: 3px; }
+QTreeWidget#analysisHierarchy::item:hover { background: #393035; }
+QTreeWidget#analysisHierarchy::item:selected { background: #52343d; color: #ffffff; }
+QTabWidget#analysisResults::pane { background: #292929; border: 1px solid #444444; }
+QTabWidget#analysisResults QTabBar::tab {
+    background: #343434; color: #cccccc; padding: 6px 12px;
+    border: 1px solid #444444;
+}
+QTabWidget#analysisResults QTabBar::tab:selected { background: #292929; border-bottom: 2px solid #d64565; }
+QLabel#analysisReport { background: #292929; color: #dddddd; padding: 12px; }
+QStatusBar#analysisStatus { background: #222222; color: #dddddd; }
+QStatusBar#analysisStatus QProgressBar {
+    border: 1px solid #444444; background: #292929; color: #dddddd; text-align: center;
+}
+QStatusBar#analysisStatus QProgressBar::chunk { background: #8f001a; }
+
+QMainWindow#structuralWindow QCheckBox { color: #cccccc; background: transparent; }
+QMainWindow#structuralWindow QCheckBox::indicator {
+    width: 13px; height: 13px; background: #1f1f1f; border: 1px solid #666666; border-radius: 2px;
+}
+QMainWindow#structuralWindow QCheckBox::indicator:checked { background: #8f001a; border-color: #d64565; }

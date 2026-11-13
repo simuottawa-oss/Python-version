@@ -1,4 +1,5 @@
-QDialog#startupDialog {
+QDialog#startupDialog,
+QDialog#scenePicker {
     background-color: #1f1f1f;
 }
 
@@ -158,13 +159,16 @@ QToolButton#sceneTypeCard {
     padding: 0;
 }
 
-QToolButton#sceneTypeCard:checked,
+QToolButton#sceneTypeCard:hover,
 QToolButton#sceneTypeCard:focus {
-    border: 1px solid #d64565;
+    border-color: #777777;
+    background-color: #292929;
 }
 
-QToolButton#sceneTypeCard:hover {
-    border-color: #d64565;
+QToolButton#sceneTypeCard:checked,
+QToolButton#sceneTypeCard:checked:hover,
+QToolButton#sceneTypeCard:checked:focus {
+    border: 1px solid #d64565;
 }
 
 QToolButton#sceneTypeCard:disabled {
@@ -172,11 +176,11 @@ QToolButton#sceneTypeCard:disabled {
     border: 1px dashed #555555;
 }
 
-QToolButton#sceneTypeCard:disabled QLabel#menuTitle {
+QLabel#menuTitle[available="false"] {
     color: #939393;
 }
 
-QToolButton#sceneTypeCard:disabled QLabel#welcomeSubtitle {
+QLabel#welcomeSubtitle[available="false"] {
     color: #808080;
 }
 

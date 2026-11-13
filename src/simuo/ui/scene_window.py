@@ -28,6 +28,8 @@ from PySide6.QtWidgets import (
 )
 
 from simuo.project.scene import Scene, SceneObject
+from simuo.project.project_format import read_project, project_data, PROJECT_FILTER
+from simuo.materials import material_from_dict
 from simuo.editor.state import EditorState
 from simuo.project.editor_metadata import read_groups, read_object_editor, write_group
 from simuo.rendering.context import configure_opengl
@@ -290,14 +292,10 @@ class SimuOMainWindow(QMainWindow):
             None. Updates project path, title, clean state, and camera framing for a
             single JSON part.
         """
-        with open(
-            path,
-            "r",
-            encoding="utf-8"
-        ) as file:
-            data = json.load(
-                file
-            )
+        document = read_project(path)
+        if document.project_type != "scene":
+            raise ValueError("This project belongs to Structural Analysis")
+        data = document.data
 
         loadedObjects = []
 
@@ -351,6 +349,7 @@ class SimuOMainWindow(QMainWindow):
                 objectData.get("acceleration", sceneObject.acceleration),
             )
             sceneObject.angularVelocity = list(objectData.get("angularVelocity", sceneObject.angularVelocity))
+            sceneObject.material_override = material_from_dict(objectData.get("material"))
 
             read_object_editor(sceneObject, objectData)
             loadedObjects.append(sceneObject)
@@ -409,13 +408,21 @@ class SimuOMainWindow(QMainWindow):
             self,
             "Open SimuO Project",
             "",
-            "SimuO Project Files (*.simuO);;All Files (*)",
+            PROJECT_FILTER,
         )
 
         if not filePath:
             return
 
         path = Path(filePath)
+        try:
+            if read_project(path).project_type == "structural":
+                from simuo.ui.project_open import open_project_window
+                open_project_window(path, self)
+                return
+        except (OSError, ValueError, TypeError) as error:
+            QMessageBox.warning(self, "Cannot Open Project", str(error))
+            return
 
         if not self.confirmUnsavedChanges("Open Project"):
             return
@@ -538,9 +545,9 @@ class SimuOMainWindow(QMainWindow):
             partPaths[source] = target
 
         self.scene.normalize_hierarchy()
-        data = {"version": 1, "objects": [],
-                "groups": [write_group(group) for group in self.scene.groups],
-                "hierarchy_order": self.scene.root_order}
+        data = project_data("scene", objects=[],
+                            groups=[write_group(group) for group in self.scene.groups],
+                            hierarchy_order=self.scene.root_order)
 
 
         for sceneObject in self.scene.objects:
@@ -561,6 +568,7 @@ class SimuOMainWindow(QMainWindow):
                 "velocity": list(sceneObject.velocity),
                 "restitution": sceneObject.restitution,
                 "body_type": sceneObject.body_type,
+                "material": sceneObject.material_override.to_dict() if sceneObject.material_override else None,
                 "acceleration": list(sceneObject.acceleration),
                 "angularVelocity": list(sceneObject.angularVelocity),
             }

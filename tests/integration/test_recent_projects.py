@@ -82,6 +82,14 @@ class RecentProjectsTests(unittest.TestCase):
         on_part.assert_called_once_with(str(part))
         on_scene.assert_not_called()
 
+    def test_structural_projects_have_their_own_recent_label(self):
+        structural = self.document("design.simuO", {"format": ".simuO", "version": 2, "project_type": "structural", "setup": {}})
+        self.assertEqual(recent.project_summary(structural)[2], "Structural")
+        recent.remember_project(structural)
+        menu = SimuOStartMenu()
+        self.addCleanup(menu.close)
+        self.assertEqual(menu.findChild(QLabel, "recentProjectKind").text(), "STRUCTURAL ANALYSIS")
+
     def test_thumbnail_keys_do_not_collide_for_same_named_projects(self):
         a = recent.thumbnail_path(self.folder / "first" / "scene.simuO")
         b = recent.thumbnail_path(self.folder / "second" / "scene.simuO")

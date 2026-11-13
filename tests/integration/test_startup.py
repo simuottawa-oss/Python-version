@@ -1,6 +1,8 @@
 """Qt startup chooser behavior and file-selection routing."""
 
 import unittest
+import tempfile
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from PySide6.QtWidgets import QApplication, QDialog, QPushButton
@@ -31,14 +33,18 @@ class StartupMenuTests(unittest.TestCase):
         on_new.assert_called_once_with()
         self.assertEqual(menu.result(), QDialog.DialogCode.Accepted)
 
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        scene = Path(temp.name)/"example.simuO"
+        scene.write_text('{"version":1,"objects":[]}')
         on_import = Mock()
         menu = SimuOStartMenu(on_import=on_import, width=900, height=600)
         with patch(
             "simuo.ui.startup.QFileDialog.getOpenFileName",
-            return_value=("example.simuO", ""),
+            return_value=(str(scene), ""),
         ):
             menu._import_project()
-        on_import.assert_called_once_with("example.simuO")
+        on_import.assert_called_once_with(str(scene))
         self.assertEqual(menu.result(), QDialog.DialogCode.Accepted)
 
     def test_part_actions_and_cancelled_picker(self):

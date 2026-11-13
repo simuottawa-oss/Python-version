@@ -6,6 +6,9 @@ them in a scene, and preview rigid-body motion.
 [Scene editor](docs/scene-editor.md) · [Part editor](docs/part-editor.md) ·
 [Developer guide](docs/README.md)
 
+[Structural Analysis](docs/structural-analysis.md) imports closed solids for
+Gmsh meshing, linear elasticity, stress visualization and cantilever diagrams.
+
 Set up your environment once, then use the [Run](#run) section to open the app.
 
 ## Windows setup
@@ -32,7 +35,7 @@ Run these commands from the repository:
 ```bash
 sudo apt update
 sudo apt install python3 python3-venv python3-pip python3-tk \
-    libgl1 libegl1 libglx-mesa0 libglib2.0-0 libfontconfig1 libdbus-1-3 \
+    libgl1 libglu1-mesa libegl1 libglx-mesa0 libglib2.0-0 libfontconfig1 libdbus-1-3 \
     libx11-xcb1 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
     libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 \
     libxcb-xkb1 libxkbcommon-x11-0 libxi6 libxrender1 build-essential python3-dev

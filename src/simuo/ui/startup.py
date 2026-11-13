@@ -183,6 +183,7 @@ class SimuOStartMenu(QDialog):
         height=700,
         on_new_part=None,
         on_open_part=None,
+        on_structural=None,
     ):
         super().__init__(parent)
 
@@ -190,6 +191,7 @@ class SimuOStartMenu(QDialog):
         self.on_import = on_import
         self.on_new_part = on_new_part
         self.on_open_part = on_open_part
+        self.on_structural = on_structural
 
         self.setObjectName("startupDialog")
         self.setWindowTitle(title)
@@ -371,7 +373,7 @@ class SimuOStartMenu(QDialog):
         text_layout = QVBoxLayout(details)
         text_layout.setContentsMargins(14, 14, 14, 14)
         text_layout.setSpacing(12)
-        kind_label = QLabel("KINEMATICS SCENE" if kind == "Scene" else "PART", details)
+        kind_label = QLabel({"Scene": "KINEMATICS SCENE", "Structural": "STRUCTURAL ANALYSIS", "Part": "PART"}[kind], details)
         kind_label.setObjectName("recentProjectKind")
         text_layout.addWidget(kind_label)
         title = QLabel(name, details)
@@ -415,6 +417,8 @@ class SimuOStartMenu(QDialog):
         return card
 
     def _open_recent(self, filepath):
+        if Path(filepath).suffix.lower() != ".simuopart" and not self._validate_project(filepath):
+            return
         callback = (self.on_open_part if Path(filepath).suffix.lower() == ".simuopart"
                     else self.on_import)
         self._finish(callback, filepath)
@@ -560,7 +564,7 @@ class SimuOStartMenu(QDialog):
                 "Structural Analysis",
                 "Evaluate stress, strain, and deformation\nunder applied loads.",
                 "structural-preview.png",
-                False,
+                True,
             ),
         ]
 
@@ -601,11 +605,13 @@ class SimuOStartMenu(QDialog):
 
             name_label = QLabel(name, details)
             name_label.setObjectName("menuTitle")
+            name_label.setProperty("available", available)
             name_label.setWordWrap(True)
             details_layout.addWidget(name_label)
 
             description_label = QLabel(description.replace("\n", " "), details)
             description_label.setObjectName("welcomeSubtitle")
+            description_label.setProperty("available", available)
             description_label.setWordWrap(True)
             details_layout.addWidget(description_label)
             card_layout.addWidget(details)
@@ -646,16 +652,28 @@ class SimuOStartMenu(QDialog):
         layout.addLayout(bottom)
 
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            self._new_project()     
+            if group.checkedId() == 2:
+                self._finish(self.on_structural)
+            else:
+                self._new_project()
             
+    def _validate_project(self, filename):
+        from simuo.project.project_format import read_project
+        try:
+            read_project(filename)
+            return True
+        except (OSError, ValueError, UnicodeError) as error:
+            QMessageBox.warning(self, "Cannot Open Project", str(error))
+            return False
+
     def _import_project(self):
         filename, _ = QFileDialog.getOpenFileName(
             self,
             "Import SimuO Project",
             "",
-            "SimuO Projects (*.simuO);;All Files (*)",
+            "SimuO Projects (*.simuO);;Legacy Structural Analysis (*.simuOAnalysis);;All Files (*)",
         )
-        if filename:
+        if filename and self._validate_project(filename):
             self._finish(self.on_import, filename)
 
     def _new_part(self):
@@ -683,6 +701,7 @@ def showStartMenu(
     on_import=None,
     on_new_part=None,
     on_open_part=None,
+    on_structural=None,
 ):
     """Construct and return the modal Qt startup chooser."""
     return SimuOStartMenu(
@@ -692,6 +711,7 @@ def showStartMenu(
         on_import=on_import,
         on_new_part=on_new_part,
         on_open_part=on_open_part,
+        on_structural=on_structural,
     )
 
 

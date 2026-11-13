@@ -18,6 +18,16 @@ def outliner_icon(kind, active=True):
                      ((10, 18), (3, 14)), ((3, 14), (3, 6)), ((3, 6), (10, 2)),
                      ((3, 6), (10, 10)), ((17, 6), (10, 10)), ((10, 10), (10, 18))):
             painter.drawLine(*a, *b)
+    elif kind == "material":
+        painter.drawEllipse(3, 3, 14, 14)
+        painter.drawArc(6, 3, 8, 14, -90*16, 180*16)
+        painter.drawLine(4, 13, 15, 5)
+    elif kind == "results":
+        painter.drawLine(3, 3, 3, 17)
+        painter.drawLine(3, 17, 18, 17)
+        painter.drawLine(5, 13, 9, 8)
+        painter.drawLine(9, 8, 13, 11)
+        painter.drawLine(13, 11, 17, 4)
     elif kind == "eye":
         path = QPainterPath()
         path.moveTo(2, 10)
