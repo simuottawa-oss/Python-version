@@ -1,18 +1,20 @@
-"""Nonmodal physics playback window using the main OpenGL renderer."""
+"""Nonmodal physics playback window with a read-only scene viewport."""
 import copy
 import time
 
 import numpy as np
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QAction
-from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-                               QPushButton, QLabel, QDoubleSpinBox, QCheckBox)
+from PySide6.QtCore import Qt, QTimer, QSize
+from PySide6.QtGui import QAction, QColor, QIcon, QPainter
+from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QFormLayout,
+                               QLabel, QDoubleSpinBox, QCheckBox, QDockWidget,
+                               QToolBar, QStyle, QScrollArea, QFrame)
 
 from simuo.parts.part_format import Part
 from simuo.parts.part_assets import PartAsset, box_vertices
 from simuo.physics.physics_world import PhysicsWorld, quaternion
 from simuo.physics.viewport.renderer import OpenGLViewport
 from simuo.project.scene import Scene, SceneObject
+from simuo.ui.theme import load_stylesheet
 
 
 class PhysicsRenderWindow(QMainWindow):
@@ -41,52 +43,126 @@ class PhysicsRenderWindow(QMainWindow):
         self.render_scene.objects = list(self.world.scene.objects)
         self.ground = self._ground()
         self.render_scene.addObject(self.ground)
-        panel = QWidget(self)
-        layout = QVBoxLayout(panel)
-        controls = QHBoxLayout()
-        self.play = QPushButton("Pause")
-        self.play.clicked.connect(self.toggle)
-        self.reset_button = QPushButton("Reset")
-        self.reset_button.clicked.connect(self.reset)
-        self.step_button = QPushButton("Step")
-        self.step_button.clicked.connect(self.single_step)
-        self.frame_button = QPushButton("Frame scene")
-        self.frame_button.clicked.connect(self.frame_scene)
-        for button in (self.play,self.reset_button,self.step_button,self.frame_button):
-            controls.addWidget(button)
-        controls.addWidget(QLabel("Gravity Y"))
-        self.gravity = QDoubleSpinBox()
-        self.gravity.setRange(-100,100)
-        self.gravity.setDecimals(2)
-        self.gravity.setSuffix(" m/s²")
-        self.gravity.setValue(self.world.gravity)
-        self.gravity.valueChanged.connect(self.world.set_gravity)
-        controls.addWidget(self.gravity)
-        self.floor = QCheckBox("Floor at y=0")
-        self.floor.setChecked(True)
-        self.floor.toggled.connect(self.change_floor)
-        controls.addWidget(self.floor)
-        controls.addStretch()
-        layout.addLayout(controls)
-        self.info = QLabel("Live rigid-body physics · scene copy · drag with right mouse / WASD to move the camera")
-        self.info.setWordWrap(True)
-        layout.addWidget(self.info)
-        self.viewport = OpenGLViewport(self,scene=self.render_scene)
-        layout.addWidget(self.viewport,1)
-        self.stats = QLabel()
-        self.stats.setWordWrap(True)
-        layout.addWidget(self.stats)
-        self.setCentralWidget(panel)
+        self.setStyleSheet(load_stylesheet("main_window") + load_stylesheet("physics_render"))
+        self.setMinimumSize(640, 480)
+        self.viewport = OpenGLViewport(self, scene=self.render_scene, read_only=True)
+        self.viewport.setMinimumSize(280, 240)
+        self.setCentralWidget(self.viewport)
+        self._create_toolbar()
+        self._create_sidebar()
+        self.playback_status = QLabel()
+        self.statusBar().addWidget(self.playback_status)
         self.frame_scene()
         self._update_status()
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.tick)
         self.timer.start(16)
-        for key, callback in (("P",self.toggle),("R",self.reset),("F",self.frame_scene)):
-            action = QAction(self)
-            action.setShortcut(key)
-            action.triggered.connect(callback)
-            self.addAction(action)
+
+    def _create_toolbar(self):
+        toolbar = QToolBar("Playback", self)
+        toolbar.setObjectName("renderToolbar")
+        toolbar.setMovable(False)
+        toolbar.setFloatable(False)
+        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        toolbar.setIconSize(QSize(18, 18))
+        self.addToolBar(Qt.ToolBarArea.BottomToolBarArea, toolbar)
+        self.playback_toolbar = toolbar
+
+        def control(title, icon, shortcut, callback, tip):
+            action = QAction(self._control_icon(icon), title, self)
+            action.setShortcut(shortcut)
+            action.setToolTip(tip)
+            if callback is not None:
+                action.triggered.connect(callback)
+            toolbar.addAction(action)
+            return action, toolbar.widgetForAction(action)
+
+        icons = QStyle.StandardPixmap
+        self.back_action, self.back_button = control(
+            "Step Back", icons.SP_MediaSkipBackward, "", self.step_back,
+            "Pause and go back one physics step (1/240 second)")
+        self.play_action, self.play = control(
+            "Pause", icons.SP_MediaPause, "P", self.toggle, "Pause or resume playback (P)")
+        self.step_action, self.step_button = control(
+            "Step Forward", icons.SP_MediaSkipForward, "", self.single_step,
+            "Pause and advance one physics step (1/240 second)")
+        self.reset_action, self.reset_button = control(
+            "Reset", icons.SP_MediaStop, "R", self.reset, "Restore the initial simulation state (R)")
+        toolbar.addSeparator()
+        self.frame_action, self.frame_button = control(
+            "Frame Scene", icons.SP_TitleBarMaxButton, "F", self.frame_scene,
+            "Fit the simulated scene in the view (F)")
+        toolbar.addSeparator()
+        self.settings_action, self.settings_button = control(
+            "Settings", icons.SP_FileDialogDetailedView, "", None,
+            "Show or hide scene settings and statistics")
+        self.settings_action.setCheckable(True)
+
+    def _control_icon(self, icon):
+        """Keep system action icons legible against the editor's dark toolbar."""
+        pixmap = self.style().standardIcon(icon).pixmap(36, 36)
+        painter = QPainter(pixmap)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+        painter.fillRect(pixmap.rect(), QColor("#c1cbd7"))
+        painter.end()
+        pixmap.setDevicePixelRatio(2)
+        return QIcon(pixmap)
+
+    def _create_sidebar(self):
+        self.details_dock = QDockWidget("Simulation", self)
+        self.details_dock.setObjectName("renderDetails")
+        self.details_dock.setFeatures(QDockWidget.DockWidgetFeature.NoDockWidgetFeatures)
+        self.details_dock.setMinimumWidth(240)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        panel = QWidget()
+        panel.setObjectName("renderPanel")
+        panel.setMinimumWidth(220)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
+
+        def heading(title):
+            label = QLabel(title)
+            label.setObjectName("renderSectionTitle")
+            layout.addWidget(label)
+
+        heading("Simulation settings")
+        form = QFormLayout()
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
+        self.gravity = QDoubleSpinBox()
+        self.gravity.setRange(-100, 100)
+        self.gravity.setDecimals(2)
+        self.gravity.setSuffix(" m/s²")
+        self.gravity.setValue(self.world.gravity)
+        self.gravity.setToolTip("Vertical acceleration; changing it starts new rewind history")
+        self.gravity.valueChanged.connect(self.change_gravity)
+        form.addRow("Gravity Y", self.gravity)
+        layout.addLayout(form)
+        self.floor = QCheckBox("Floor at y = 0")
+        self.floor.setChecked(True)
+        self.floor.setToolTip("Toggle floor contact and reset playback")
+        self.floor.toggled.connect(self.change_floor)
+        layout.addWidget(self.floor)
+        self.info = QLabel("Playback uses a copy of your scene. Use the scene editor to edit objects.")
+        self.info.setObjectName("renderHint")
+        self.info.setWordWrap(True)
+        layout.addWidget(self.info)
+        heading("Statistics")
+        self.stats = QLabel()
+        self.stats.setWordWrap(True)
+        self.stats.setTextFormat(Qt.TextFormat.PlainText)
+        self.stats.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        layout.addWidget(self.stats)
+        layout.addStretch()
+        scroll.setWidget(panel)
+        self.details_dock.setWidget(scroll)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.details_dock)
+        self.settings_action.setChecked(True)
+        self.settings_action.toggled.connect(self.details_dock.setVisible)
+        self.details_dock.visibilityChanged.connect(self.settings_action.setChecked)
+        self.resizeDocks([self.details_dock], [260], Qt.Orientation.Horizontal)
 
     def _ground(self):
         """Build a static visual floor patch sized around the initial simulation scene; the
@@ -143,7 +219,9 @@ class PhysicsRenderWindow(QMainWindow):
         self.running = running
         self.accumulator = 0
         self.last_time = time.perf_counter()
-        self.play.setText("Pause" if running else "Play")
+        self.play_action.setText("Pause" if running else "Play")
+        icon = QStyle.StandardPixmap.SP_MediaPause if running else QStyle.StandardPixmap.SP_MediaPlay
+        self.play_action.setIcon(self._control_icon(icon))
 
     def toggle(self):
         """Switch between running and paused playback and update the status display.
@@ -175,6 +253,20 @@ class PhysicsRenderWindow(QMainWindow):
         self.set_running(False)
         self.world.step()
         self.viewport.update()
+        self._update_status()
+
+    def step_back(self):
+        """Pause and restore the previous simulation step without moving the camera."""
+        self.set_running(False)
+        try:
+            self.world.step_back()
+        except Exception as error:
+            self.statusBar().showMessage(f"Cannot step back: {error}")
+        self.viewport.update()
+        self._update_status()
+
+    def change_gravity(self, value):
+        self.world.set_gravity(value)
         self._update_status()
 
     def change_floor(self, enabled):
@@ -230,14 +322,17 @@ class PhysicsRenderWindow(QMainWindow):
             None. Replaces the status label text.
         """
         objects = self.world.scene.objects
+        self.back_action.setEnabled(self.world.can_step_back)
         counts = " / ".join(f"{sum(obj.body_type == mode for obj in objects)} {mode}"
                             for mode in ("dynamic", "kinematic", "static"))
-        label = f"{'RUNNING' if self.running else 'PAUSED'} · {self.world.time:.3f} s · {counts}"
+        self.playback_status.setText(
+            f"{'Running' if self.running else 'Paused'} · {self.world.time:.3f} s")
+        label = counts.replace(" / ", "\n")
         if self.world.legacy_count:
-            label += f" · {self.world.legacy_count} legacy meshes (moving bodies use convex hulls)"
-        speeds = [f"{obj.name}: y={obj.position[1]:.3f} m, speed={np.linalg.norm(obj.velocity):.3f} m/s"
+            label += f"\n\n{self.world.legacy_count} legacy meshes (moving bodies use convex hulls)"
+        speeds = [f"{obj.name}\nHeight: {obj.position[1]:.3f} m · Speed: {np.linalg.norm(obj.velocity):.3f} m/s"
                   for obj in objects if obj.body_type != "static"]
-        self.stats.setText(label + ("\n"+" | ".join(speeds[:5]) if speeds else ""))
+        self.stats.setText(label + ("\n\n" + "\n\n".join(speeds[:5]) if speeds else ""))
 
     def closeEvent(self, event):
         """Stop both timers, release uploaded scene buffers, disconnect Bullet, and accept

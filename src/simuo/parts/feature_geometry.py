@@ -160,6 +160,8 @@ class FeatureModel:
         """
         self.features = copy.deepcopy(features or [])
         self.vertices = np.empty(0,dtype=np.float32)
+        self.analysis_points = np.empty((0, 3), dtype=np.float64)
+        self.analysis_triangles = np.empty((0, 3), dtype=np.int64)
         self.faces = []
         self.volume = 0.
 
@@ -291,9 +293,13 @@ class FeatureModel:
                 previous_ids.add(feature["id"])
         self.vertices = np.empty(0,dtype=np.float32)
         self.volume = 0
+        self.analysis_points = np.empty((0, 3), dtype=np.float64)
+        self.analysis_triangles = np.empty((0, 3), dtype=np.int64)
         face_vertices = np.empty(0,dtype=float)
         if solid is not None:
             mesh = solid.to_mesh64()
+            self.analysis_points = np.asarray(mesh.vert_properties)[:, :3].copy()
+            self.analysis_triangles = np.asarray(mesh.tri_verts, dtype=np.int64).copy()
             triangles = np.asarray(mesh.vert_properties)[:,:3][np.asarray(mesh.tri_verts)]
             # Face supports must retain the kernel's double precision. Using
             # rendered float32 coordinates here can leave a microscopic gap

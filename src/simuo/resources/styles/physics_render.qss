@@ -1,0 +1,40 @@
+QToolBar#renderToolbar {
+    background: #292629;
+    border: none;
+    border-top: 1px solid #443a40;
+    padding: 6px;
+    spacing: 4px;
+}
+QToolBar#renderToolbar QToolButton {
+    color: #d5dde7;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    padding: 6px;
+}
+QToolBar#renderToolbar QToolButton:hover { background: #393035; }
+QToolBar#renderToolbar QToolButton:pressed { background: #52343d; border-color: #ae8490; }
+QToolBar#renderToolbar QToolButton:focus { border-color: #ae8490; }
+QToolBar#renderToolbar QToolButton:checked { background: #52343d; border-color: #ae8490; }
+QToolBar#renderToolbar QToolButton:disabled { color: #929ba7; }
+QToolBar#renderToolbar::separator { background: #4b3d44; width: 1px; margin: 4px; }
+QWidget#renderPanel { background: #303030; }
+QLabel#renderSectionTitle {
+    color: #e1e8f1;
+    font-weight: bold;
+    border-bottom: 1px solid #4b3d44;
+    padding-bottom: 8px;
+}
+QLabel#renderHint { color: #aeb6c0; }
+QWidget#renderPanel QDoubleSpinBox {
+    color: #eeeeee;
+    background: #222222;
+    border: 1px solid #555555;
+    border-radius: 3px;
+    padding: 5px;
+}
+QWidget#renderPanel QDoubleSpinBox:focus { border-color: #ae8490; }
+QWidget#renderPanel QCheckBox { color: #d5dde7; spacing: 7px; }
+QStatusBar { background: #222222; color: #aeb6c0; }
+QStatusBar QLabel { color: #aeb6c0; padding: 3px; }
+QStatusBar::item { border: none; }

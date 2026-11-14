@@ -1,6 +1,7 @@
 """Mouse tool gestures, selection modifiers, cancellation, and camera isolation."""
 
 import unittest
+from unittest.mock import patch
 
 
 import glm
@@ -64,6 +65,34 @@ class ToolInput(unittest.TestCase):
         self.mouse(QEvent.Type.MouseButtonPress, start)
         self.mouse(QEvent.Type.MouseMove, start + [50, 10])
         return start
+
+    def test_vertical_camera_keys_and_focus_cleanup_in_both_viewports(self):
+        from simuo.ui.structural_viewport import StructuralViewport
+        structural = StructuralViewport()
+        self.addCleanup(structural.close)
+        structural.navigation.stop()
+        for view, move in ((self.viewport, lambda: self.viewport.update_camera(.1)), (structural, structural.navigate)):
+            with self.subTest(view=type(view).__name__), patch.object(view, "hasFocus", return_value=True):
+                before = glm.vec3(view.camera.position)
+                QApplication.sendEvent(view, QKeyEvent(QEvent.KeyPress, Qt.Key_Space, Qt.NoModifier))
+                move()
+                self.assertGreater(view.camera.position.y, before.y)
+                QApplication.sendEvent(view, QKeyEvent(QEvent.KeyRelease, Qt.Key_Space, Qt.NoModifier))
+                before = glm.vec3(view.camera.position)
+                override = QKeyEvent(QEvent.ShortcutOverride, Qt.Key_Alt, Qt.AltModifier)
+                QApplication.sendEvent(view, override)
+                self.assertTrue(override.isAccepted())
+                QApplication.sendEvent(view, QKeyEvent(QEvent.KeyPress, Qt.Key_Alt, Qt.AltModifier))
+                move()
+                self.assertLess(view.camera.position.y, before.y)
+                QApplication.sendEvent(view, QKeyEvent(QEvent.KeyRelease, Qt.Key_Alt, Qt.NoModifier))
+                self.assertFalse(view.keys)
+                QApplication.sendEvent(view, QKeyEvent(QEvent.KeyPress, Qt.Key_W, Qt.NoModifier))
+                QApplication.sendEvent(view, QKeyEvent(QEvent.KeyPress, Qt.Key_Control, Qt.ControlModifier))
+                self.assertFalse(view.keys)
+                QApplication.sendEvent(view, QKeyEvent(QEvent.KeyPress, Qt.Key_Alt, Qt.AltModifier))
+                QApplication.sendEvent(view, QFocusEvent(QEvent.FocusOut))
+                self.assertFalse(view.keys)
 
     def test_drag_commits_on_release_and_freezes_camera(self):
         before = glm.vec3(self.viewport.camera.position)

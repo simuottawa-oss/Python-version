@@ -9,3 +9,6 @@ pybullet==3.2.7
 moderngl
 glfw
 PyInstaller>=6,<7
+gmsh>=4.13,<5
+scikit-fem>=12,<13
+scipy>=1.13,<2

@@ -38,7 +38,7 @@ class OpenGLViewport(QOpenGLWidget):
     Keyboard movement is relative to the current camera orientation:
     - W/S move along the camera's forward vector
     - A/D strafe left/right along the camera's right vector
-    - Space/C move vertically along the world's up vector
+    - Space/Alt move vertically along the world's up vector
 
     Mouse interaction is used for looking around the scene. While the right mouse
     button is held, the cursor is recentered inside the widget so the user can
@@ -57,9 +57,9 @@ class OpenGLViewport(QOpenGLWidget):
     transform_finished = Signal(bool)
     tools_visibility_requested = Signal()
 
-    CAMERA_KEYS = frozenset((Qt.Key_W, Qt.Key_A, Qt.Key_S, Qt.Key_D, Qt.Key_Space, Qt.Key_C, Qt.Key_Left, Qt.Key_Right))
-    SHORTCUT_KEYS = frozenset((Qt.Key_Control, Qt.Key_Meta, Qt.Key_Alt, Qt.Key_AltGr))
-    SHORTCUT_MODIFIERS = Qt.ControlModifier | Qt.MetaModifier | Qt.AltModifier | Qt.GroupSwitchModifier
+    CAMERA_KEYS = frozenset((Qt.Key_W, Qt.Key_A, Qt.Key_S, Qt.Key_D, Qt.Key_Space, Qt.Key_Alt, Qt.Key_Left, Qt.Key_Right))
+    SHORTCUT_KEYS = frozenset((Qt.Key_Control, Qt.Key_Meta, Qt.Key_AltGr))
+    SHORTCUT_MODIFIERS = Qt.ControlModifier | Qt.MetaModifier | Qt.GroupSwitchModifier
 
     def __init__(
         self,
@@ -94,6 +94,8 @@ class OpenGLViewport(QOpenGLWidget):
         self.selection_buffer = None
         self.pick_modifiers = Qt.KeyboardModifier.NoModifier
 
+        from simuo.ui.camera_keys import VerticalNavigationFilter
+        self.vertical_navigation = VerticalNavigationFilter(self)
         self.setFocusPolicy(
             Qt.StrongFocus
         )
@@ -929,7 +931,7 @@ class OpenGLViewport(QOpenGLWidget):
                 * speed
             )
 
-        if Qt.Key_C in self.keys:
+        if Qt.Key_Alt in self.keys:
             self.camera.position -= (
                 self.camera.world_up
                 * speed

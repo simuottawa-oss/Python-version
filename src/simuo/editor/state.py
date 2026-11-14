@@ -242,6 +242,14 @@ class EditorState(QObject):
             updates.append((obj, attribute, vector))
         return self._edit("Change " + attribute.title(), updates)
 
+    def set_material(self, identifier, material):
+        obj = self.find_object(identifier)
+        if obj is None:
+            return False
+        updated = copy(obj)
+        updated.material_override = material
+        return self._edit("Change Material", [(obj, "material_override", material)])
+
     def set_physics_properties(self, identifier, *, bounce=None, velocity=None, body_type=None, acceleration=None):
         obj = self.find_object(identifier)
         if obj is None:

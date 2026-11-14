@@ -83,6 +83,9 @@ def project_summary(filepath):
     data = {}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
+        if not is_part:
+            from simuo.project.project_format import read_project
+            kind = "Structural" if read_project(path).project_type == "structural" else "Scene"
         if not isinstance(data, dict):
             data = {}
     except (OSError, ValueError, UnicodeError):

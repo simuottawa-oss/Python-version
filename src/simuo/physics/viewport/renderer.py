@@ -412,7 +412,7 @@ class OpenGLViewport(QOpenGLWidget):
         self,
         parent=None,
         scene=None,
-        
+        read_only=False,
     ):
 
             
@@ -425,6 +425,8 @@ class OpenGLViewport(QOpenGLWidget):
                 independent Qt widget.
             scene (Scene, optional): Scene to display/use; None uses the constructor's
                 empty or unbound default.
+            read_only (bool): Disable object picking, gizmos, and manipulation while
+                retaining camera navigation.
 
         Returns:
             None.
@@ -447,6 +449,7 @@ class OpenGLViewport(QOpenGLWidget):
         )
         self.ignore_center_event = False
         self.scene = scene
+        self.read_only = read_only
 
         self.setFocusPolicy(
             Qt.StrongFocus
@@ -1112,7 +1115,7 @@ class OpenGLViewport(QOpenGLWidget):
             glBindVertexArray(0)
             glUseProgram(0)
 
-        if self.mover is not None:
+        if not self.read_only and self.mover is not None:
             vertex_data, segments = self.mover.build_render_data()
             glDisable(GL_DEPTH_TEST)
             glUseProgram(self.gizmoShader)
@@ -1275,7 +1278,7 @@ class OpenGLViewport(QOpenGLWidget):
         Returns:
             None. Updates selection/drag state or captures the pointer for mouse look.
         """
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.LeftButton and not self.read_only:
             width, height = max(1, self.width()), max(1, self.height())
             projection = glm.perspective(glm.radians(60.0), width / height, 0.1, 1000.0)
             origin, direction = self.camera.mouse_ray(
@@ -1317,7 +1320,7 @@ class OpenGLViewport(QOpenGLWidget):
             self.releaseMouse()
             self.unsetCursor()
 
-        if event.button() == Qt.LeftButton and self.mover is not None:
+        if event.button() == Qt.LeftButton and not self.read_only and self.mover is not None:
             if self.mover.dragging_axis is not None:
                 self.mover.end_drag()
             
@@ -1331,7 +1334,7 @@ class OpenGLViewport(QOpenGLWidget):
         Returns:
             None. Updates a selected part and dirty state, or the camera and pointer.
         """
-        if self.mover is not None:
+        if not getattr(self, "read_only", False) and self.mover is not None:
             width, height = max(1, self.width()), max(1, self.height())
             projection = glm.perspective(glm.radians(60.0), width / height, 0.1, 1000.0)
             origin, direction = self.camera.mouse_ray(

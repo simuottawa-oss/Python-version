@@ -14,7 +14,7 @@ from pathlib import Path
 if sys.platform.startswith("linux") and os.environ.get("DISPLAY"):
     os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 from simuo.ui.startup import showStartMenu
 from simuo.ui.scene_window import App
 from simuo.resources.paths import resource_path
@@ -80,6 +80,9 @@ def startup_menu():
         startup["action"] = "open_part"
         startup["filepath"] = filepath
 
+    def new_structural():
+        startup["action"] = "structural"
+
     logo_path = resource_path("Images", "simuo_logo.png")
 
     menu = showStartMenu(
@@ -89,6 +92,7 @@ def startup_menu():
         on_import=import_project,
         on_new_part=new_part,
         on_open_part=open_part,
+        on_structural=new_structural,
     )
 
     # Keep closing the chooser from scheduling an application quit before the selected
@@ -114,12 +118,19 @@ def main():
         int or None: Editor event-loop exit code, or None if the startup chooser was
         closed without a selection.
     """
-    parser = argparse.ArgumentParser(description="SimuO scene and part editors")
-    parser.add_argument("project", nargs="?", help=".simuO scene or .simuOPart to open")
+    parser = argparse.ArgumentParser(description="SimuO scene, part and structural editors")
+    parser.add_argument("project", nargs="?", help=".simuO project or .simuOPart to open (legacy analyses supported)")
     parser.add_argument("--new", action="store_true", help="open a new scene directly")
     parser.add_argument("--part-editor", action="store_true", help="open the part sketch editor (optionally supply a .simuOPart)")
+    parser.add_argument("--structural", action="store_true", help="open structural analysis (optionally supply a solid or .simuO project)")
+    parser.add_argument("--structural-smoke", action="store_true", help="run the packaged meshing/solver self-check and exit")
     args = parser.parse_args()
-    if args.part_editor:
+    if args.structural_smoke:
+        from simuo.structural.smoke import run_smoke
+        return run_smoke()
+    if args.structural or (args.project and Path(args.project).suffix.lower() == ".simuoanalysis"):
+        action, filepath = "structural", args.project
+    elif args.part_editor:
         action,filepath = "open_part" if args.project else "new_part",args.project
     elif args.project and Path(args.project).suffix.lower()==".simuopart":
         action,filepath = "open_part",args.project
@@ -132,6 +143,21 @@ def main():
 
     if action is None:
         return
+
+    if filepath and Path(filepath).suffix.lower() in (".simuo", ".simuoanalysis"):
+        from simuo.project.project_format import read_project
+        try:
+            kind = read_project(filepath).project_type
+            action = "structural" if kind == "structural" else "import"
+        except (OSError, ValueError, UnicodeError) as error:
+            configure_opengl()
+            qt_app = QApplication.instance() or QApplication(sys.argv)
+            QMessageBox.warning(None, "Cannot Open Project", str(error))
+            return 1
+
+    if action == "structural":
+        from simuo.ui.structural_window import run_structural
+        return run_structural(filepath)
 
     if action in ("new_part","open_part"):
         from simuo.ui.parts.part_editor import run_part_editor

@@ -1,16 +1,18 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from pathlib import Path
+import gmsh
+from PyInstaller.utils.hooks import collect_submodules
 project_root = Path(SPECPATH).resolve().parent
 
 a = Analysis(
     [str(project_root / 'src' / 'main.py')],
     pathex=[str(project_root / 'src')],
-    binaries=[],
+    binaries=[(str(Path(gmsh.lib._name).resolve()), '.')],
     datas=[(str(project_root / 'Images'), 'Images'),
            (str(project_root / 'Assets'), 'Assets'),
            (str(project_root / 'src/simuo/resources/styles'), 'simuo/resources/styles')],
-    hiddenimports=[],
+    hiddenimports=collect_submodules('skfem') + collect_submodules('simuo.structural'),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

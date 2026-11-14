@@ -38,6 +38,34 @@ def tool_icon(kind):
         painter.drawLine(8, 12, 17, 3)
         painter.drawLine(12, 3, 17, 3)
         painter.drawLine(17, 3, 17, 8)
+    elif kind == "fixed_point":
+        painter.drawEllipse(7, 5, 6, 6)
+        painter.drawLine(10, 11, 4, 17)
+        painter.drawLine(10, 11, 16, 17)
+        painter.drawLine(3, 17, 17, 17)
+    elif kind == "pinned_face":
+        painter.drawLine(3, 4, 17, 4)
+        painter.drawEllipse(8, 5, 4, 4)
+        painter.drawLine(10, 9, 4, 16)
+        painter.drawLine(10, 9, 16, 16)
+        painter.drawLine(3, 17, 17, 17)
+    elif kind == "clamp":
+        painter.drawLine(5, 3, 5, 17)
+        for y in (4, 8, 12, 16):
+            painter.drawLine(2, y+2, 5, y)
+        painter.drawLine(5, 10, 17, 10)
+    elif kind in ("point", "force", "pressure"):
+        if kind == "point":
+            painter.drawEllipse(3, 11, 5, 5)
+            painter.drawLine(7, 12, 16, 3)
+            painter.drawLine(11, 3, 16, 3)
+            painter.drawLine(16, 3, 16, 8)
+        else:
+            painter.drawLine(2, 16, 18, 16)
+            for x in (4, 10, 16):
+                painter.drawLine(x, 3, x, 13)
+                painter.drawLine(x-2, 10, x, 13)
+                painter.drawLine(x+2, 10, x, 13)
     painter.end()
     pixmap.setDevicePixelRatio(2)
     return QIcon(pixmap)

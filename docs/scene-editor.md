@@ -3,7 +3,7 @@
 ## Viewport and editing
 
 - `W`, `A`, `S`, and `D` move the camera relative to its viewing direction.
-- `Space` moves the camera up. Left/Right turn the camera.
+- `Space` moves the camera up and `Alt` moves it down while the viewport has focus, without right-click. Left/Right turn the camera.
 - `C` moves the camera down. Command/Control/Alt shortcuts stop camera movement
   and never start it. Press a movement key again to resume after a shortcut.
 - Hold the right mouse button and move the mouse to look around.
@@ -161,8 +161,28 @@ Velocity is in m/s and acceleration is in m/s². Choose **Render** to simulate
 a copy of the scene. Reopen playback after editing physics settings to use
 the new values.
 
-Playback provides **Pause/Play** (`P`), **Step** (1/240 s), **Reset** (`R`),
-**Frame scene** (`F`), gravity, and an optional floor. Bullet uses the
+Playback provides **Step Back**, **Pause/Play** (`P`), **Step Forward**,
+**Reset** (`R`), **Frame Scene** (`F`), and **Settings** in the bottom toolbar,
+directly above playback state and elapsed simulation time. Both step buttons
+pause playback and move one physics step (1/240 s). Step Back restores poses,
+velocities, and simulation time; Play resumes from the restored state.
+
+**Settings** shows or hides the initially visible Simulation sidebar, containing
+gravity, the optional floor, body counts, and motion statistics. The bottom
+status bar shows playback state and elapsed simulation time. The Settings button
+highlights while the sidebar is open.
+
+The rendered scene is read-only: objects cannot be selected or dragged, and
+there are no movement gizmos. Right-drag and the camera movement keys still
+let you explore the scene. Gravity and floor controls affect only the playback
+copy; changing the floor resets playback. Changing gravity starts new rewind
+history at the current time. Step Back is disabled at the start of that history
+and after Reset. History uses a bounded set of solver checkpoints; rewinding
+beyond recent checkpoints replays from the history's starting state and may
+take longer in long simulations. Edit objects in the scene editor
+and reopen Render to simulate the changes.
+
+Bullet uses the
 instance's transform and motion along with the part's mass and material.
 Legacy OBJ parts default to static. A dynamic legacy mesh uses a convex hull
 for collision and a default mass of 1 kg. See [file formats](file-formats.md)

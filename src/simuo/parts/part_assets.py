@@ -24,18 +24,9 @@ class PartAsset:
         return tuple(int(self.part.color[i:i+2], 16)/255 for i in (1, 3, 5))
 
 
-def loadObjFlatShaded(filename):
-    """Read OBJ positions and faces, triangulate polygon fans, and compute flat normals.
-    Supports negative indices but ignores material and texture sidecars.
-
-    Args:
-        filename (str or Path): OBJ mesh file to read.
-
-    Returns:
-        numpy.ndarray: Flat float32 triangle data, six position/normal values per
-        vertex; invalid meshes raise ValueError.
-    """
-    positions, output = [], []
+def load_obj_geometry(filename):
+    """Read indexed OBJ triangles in double precision, without touching the source."""
+    positions, triangles = [], []
     with Path(filename).open(encoding="utf-8-sig") as stream:
         for line_number, line in enumerate(stream, 1):
             tokens = line.split("#", 1)[0].split()
@@ -45,7 +36,7 @@ def loadObjFlatShaded(filename):
                 if tokens[0] == "v":
                     if len(tokens) < 4:
                         raise ValueError("Vertex needs three coordinates")
-                    position = np.asarray([float(v) for v in tokens[1:4]], dtype=np.float64)
+                    position = [float(v) for v in tokens[1:4]]
                     if not np.isfinite(position).all():
                         raise ValueError("Vertex coordinates must be finite")
                     positions.append(position)
@@ -61,23 +52,31 @@ def loadObjFlatShaded(filename):
                         if not 0 <= index < len(positions):
                             raise ValueError("Face references an unavailable vertex")
                         indices.append(index)
-                    for i in range(1, len(indices)-1):
-                        triangle = [positions[j] for j in (indices[0], indices[i], indices[i+1])]
-                        normal = np.cross(triangle[1]-triangle[0], triangle[2]-triangle[0])
-                        length = np.linalg.norm(normal)
-                        normal = normal/length if length > 0 else np.array([0., 1., 0.])
-                        for point in triangle:
-                            output.extend((*point, *normal))
+                    triangles.extend((indices[0], indices[i], indices[i+1]) for i in range(1, len(indices)-1))
             except (ValueError, IndexError, OverflowError) as error:
                 raise ValueError(f"{filename}:{line_number}: {error}") from error
+    if not triangles:
+        raise ValueError(f"{filename}: no renderable finite triangle geometry")
+    return np.asarray(positions, dtype=np.float64), np.asarray(triangles, dtype=np.int64)
+
+
+def loadObjFlatShaded(filename):
+    """Keep the rendering interface while sharing double-precision OBJ extraction."""
+    points, indices = load_obj_geometry(filename)
+    triangles = points[indices]
+    normals = np.cross(triangles[:, 1]-triangles[:, 0], triangles[:, 2]-triangles[:, 0])
+    lengths = np.linalg.norm(normals, axis=1)
+    valid = lengths > 0
+    normals[valid] /= lengths[valid, None]
+    normals[~valid] = (0., 1., 0.)
     with np.errstate(over="ignore", invalid="ignore"):
-        result = np.asarray(output, dtype=np.float32)
-    if not result.size or not np.isfinite(result).all():
+        result = np.concatenate((triangles, np.repeat(normals[:, None, :], 3, axis=1)), axis=2).astype(np.float32).ravel()
+    if not np.isfinite(result).all():
         raise ValueError(f"{filename}: no renderable finite triangle geometry")
     return result
 
 
-def box_vertices(part):
+def box_vertices(part, dtype=np.float32):
     # Normals are analytic, avoiding cross-product underflow for tiny boxes.
     """Build a centered box mesh with analytic outward normals and check GPU precision.
 
@@ -97,7 +96,7 @@ def box_vertices(part):
         for index in (a,b,c,a,c,d):
             output.extend((*positions[index], *normal))
     with np.errstate(over="ignore", invalid="ignore", under="ignore"):
-        vertices = np.asarray(output, dtype=np.float32)
+        vertices = np.asarray(output, dtype=dtype)
     # Parts may be numerically valid in double precision but unrenderable on GPU.
     rendered = vertices.reshape(-1,6)[:, :3]
     if not np.isfinite(vertices).all() or np.any(np.ptp(rendered, axis=0) <= 0):

@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from simuo.parts.part_assets import load_asset
 from simuo.parts.part_format import number, vector
+from simuo.materials import MaterialDefinition, inherited_material
 
 
 BODY_TYPES = ("static", "dynamic", "kinematic")
@@ -65,6 +66,7 @@ class SceneObject:
         self.angularVelocity = [0.0, 0.0, 0.0]
         self._restitution = None
         self._body_type = None
+        self._material_override = None
 
         self.asset = None
         self.part = None
@@ -83,6 +85,20 @@ class SceneObject:
     # -------------------------------------------------
     # Static Functions
     # -------------------------------------------------
+
+    @property
+    def material_override(self):
+        return self._material_override
+
+    @material_override.setter
+    def material_override(self, value):
+        if value is not None and not isinstance(value, MaterialDefinition):
+            raise ValueError("Invalid object material assignment")
+        self._material_override = value
+
+    @property
+    def material(self):
+        return self._material_override or inherited_material(self.part)
 
     @property
     def viewport_visible(self):
