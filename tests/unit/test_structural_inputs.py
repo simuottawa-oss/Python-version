@@ -107,6 +107,36 @@ class StructuralInputTests(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             load_analysis(path)
 
+    def test_typed_support_roundtrip_and_legacy_clamps(self):
+        g = load_geometry(native_box(self.directory))
+        records = (SupportCondition("fixed_face", (0, 1), name="Clamp"),
+                   SupportCondition("pinned_face", (2, 3), name="Pin"),
+                   SupportCondition("fixed_point", source_triangle=4, barycentric=(.2,.3,.5), name="Point"))
+        setup = AnalysisSetup(g.path, g.fingerprint, "m", Material(2e11, .3), MeshSettings(.1), support_conditions=records)
+        path = self.directory/"supports.simuO"
+        save_analysis(path, setup)
+        data = json.loads(path.read_text())
+        self.assertEqual(data["version"], 2)
+        self.assertEqual(data["setup"]["setup_version"], 2)
+        self.assertEqual(load_analysis(path), setup)
+        data["setup"].pop("setup_version")
+        data["setup"].pop("support_conditions")
+        data["setup"]["supports"] = [[0,1]]
+        data["setup"]["support_names"] = ["Original"]
+        path.write_text(json.dumps(data))
+        legacy = load_analysis(path)
+        self.assertEqual(all_supports(legacy)[0].kind, "fixed_face")
+        self.assertEqual(all_supports(legacy)[0].name, "Original")
+        self.assertEqual(all_supports(legacy)[0].identifier, all_supports(legacy)[0].identifier)
+        data["setup"]["setup_version"] = 999
+        path.write_text(json.dumps(data))
+        with self.assertRaisesRegex(ValueError, "setup version"):
+            load_analysis(path)
+        with self.assertRaises(ValueError):
+            SupportCondition("fixed_point", source_triangle=1, barycentric=(.1,.2,.3))
+        with self.assertRaises(ValueError):
+            SupportCondition("pinned_face", (0,1), source_triangle=1)
+
     def test_invalid_inputs_and_display_fields(self):
         for e, nu in ((0, .3), (1, .5), (1, -1), (float("nan"), .3), (True, .3)):
             with self.assertRaises(ValueError):

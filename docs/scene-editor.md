@@ -3,7 +3,7 @@
 ## Viewport and editing
 
 - `W`, `A`, `S`, and `D` move the camera relative to its viewing direction.
-- `Space` moves the camera up. Left/Right turn the camera.
+- `Space` moves the camera up and `Alt` moves it down while the viewport has focus, without right-click. Left/Right turn the camera.
 - `C` moves the camera down. Command/Control/Alt shortcuts stop camera movement
   and never start it. Press a movement key again to resume after a shortcut.
 - Hold the right mouse button and move the mouse to look around.

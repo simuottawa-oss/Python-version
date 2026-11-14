@@ -1131,7 +1131,7 @@ class SimuOMainWindow(QMainWindow):
         QMessageBox.information(
             self, "SimuO Controls",
             "Import Part adds a model. Save stores your scene and its model references.\n\n"
-            "Camera: W/S forward/back, A/D left/right, Space/C up/down.\n"
+            "Camera: W/S forward/back, A/D left/right, Space/Alt up/down.\n"
             "Left/Right arrows turn the camera left/right.\n"
             "Hold the right mouse button and move the mouse to look around.\n"
             "Esc closes the editor after checking for unsaved changes.\n\n"

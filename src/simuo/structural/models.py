@@ -102,6 +102,46 @@ def point_load_key(loads):
 
 
 @dataclass(frozen=True)
+class SupportCondition:
+    kind: str
+    triangles: tuple[int, ...] = ()
+    source_triangle: int | None = None
+    barycentric: tuple[float, ...] = ()
+    identifier: str = field(default_factory=lambda: uuid4().hex)
+    name: str = ""
+
+    def __post_init__(self):
+        object.__setattr__(self, "triangles", tuple(self.triangles))
+        object.__setattr__(self, "barycentric", tuple(self.barycentric))
+        if self.kind not in ("fixed_face", "pinned_face", "fixed_point"):
+            raise ValueError("Unknown support type")
+        if not isinstance(self.identifier, str) or not self.identifier or not isinstance(self.name, str):
+            raise ValueError("Invalid support identity")
+        if self.kind == "fixed_point":
+            anchor = PointLoad(self.source_triangle, self.barycentric, (0., 0., 0.))
+            if self.triangles:
+                raise ValueError("A fixed point cannot also select faces")
+            object.__setattr__(self, "barycentric", anchor.barycentric)
+        else:
+            object.__setattr__(self, "triangles", selection(self.triangles))
+            if self.source_triangle is not None or self.barycentric:
+                raise ValueError("Face supports cannot also select a point")
+
+
+def all_supports(setup):
+    """Retain the Python API for legacy face-clamp tuples."""
+    legacy = tuple(SupportCondition("fixed_face", triangles=triangles,
+                    identifier=f"legacy-clamp-{i}",
+                    name=setup.support_names[i] if setup.support_names else f"Fixed Face {i+1}")
+                   for i, triangles in enumerate(setup.supports))
+    return (*legacy, *setup.support_conditions)
+
+
+def point_targets(setup):
+    return (*setup.point_loads, *(s for s in all_supports(setup) if s.kind == "fixed_point"))
+
+
+@dataclass(frozen=True)
 class BeamConfiguration:
     clamp: tuple[int, ...]
     free_end: tuple[int, ...]
@@ -124,6 +164,7 @@ class AnalysisSetup:
     beam: BeamConfiguration | None = None
     point_loads: tuple[PointLoad, ...] = ()
     support_names: tuple[str, ...] = ()
+    support_conditions: tuple[SupportCondition, ...] = ()
 
     def __post_init__(self):
         if not isinstance(self.geometry_path, str) or not self.geometry_path:
@@ -140,11 +181,14 @@ class AnalysisSetup:
             raise ValueError("Invalid surface load")
         object.__setattr__(self, "point_loads", tuple(self.point_loads))
         object.__setattr__(self, "support_names", tuple(self.support_names))
+        object.__setattr__(self, "support_conditions", tuple(self.support_conditions))
+        if any(not isinstance(s, SupportCondition) for s in self.support_conditions):
+            raise ValueError("Invalid support condition")
         if any(not isinstance(v, PointLoad) for v in self.point_loads):
             raise ValueError("Invalid point load")
-        ids = [v.identifier for v in (*self.loads, *self.point_loads)]
+        ids = [v.identifier for v in (*self.loads, *self.point_loads, *self.support_conditions)]
         if len(ids) != len(set(ids)):
-            raise ValueError("Load identifiers must be unique")
+            raise ValueError("Condition identifiers must be unique")
         if self.support_names and (len(self.support_names) != len(self.supports) or any(not isinstance(v, str) for v in self.support_names)):
             raise ValueError("Invalid support names")
         gravity = tuple(finite(x, "Gravity") for x in self.gravity)
@@ -195,6 +239,8 @@ class SolidMesh:
     settings: MeshSettings
     point_anchors: tuple = ()
     point_nodes: dict[str, int] = field(default_factory=dict)
+    source_points: np.ndarray | None = None
+    source_triangles: np.ndarray | None = None
 
     def selected_boundary(self, triangles):
         chosen = set(triangles)
@@ -231,3 +277,4 @@ class AnalysisResult:
     beam_moments: np.ndarray | None = None
     beam_message: str = ""
     root_reaction: np.ndarray = field(default_factory=lambda: np.zeros(6))
+    support_reactions: dict = field(default_factory=dict)

@@ -7,7 +7,7 @@ import numpy as np
 
 from simuo.resources.paths import resource_path
 from .jobs import BackgroundJob
-from .models import AnalysisSetup, Material, MeshSettings, SurfaceLoad, PointLoad
+from .models import AnalysisSetup, Material, MeshSettings, SurfaceLoad, PointLoad, SupportCondition
 from .persistence import save_analysis, load_analysis
 from simuo.project.project_format import read_project
 from dataclasses import replace
@@ -52,6 +52,9 @@ def run_smoke():
         job.start("mesh", geometry, settings, (point,))
         point_mesh = wait_for_job(job)
         point_setup = replace(setup, loads=(), point_loads=(point,))
+        clamp = SupportCondition("fixed_face", ends[0], name="Clamp")
+        pin = SupportCondition("pinned_face", ends[1], name="Pin")
+        point_setup = replace(point_setup, supports=(), support_conditions=(clamp, pin))
         project = Path(directory)/"structural.simuO"
         save_analysis(project, point_setup)
         if read_project(project).project_type != "structural":
@@ -60,7 +63,9 @@ def run_smoke():
         point_result = wait_for_job(job)
         if not np.allclose(point_result.applied_force, (0., -100., 0.), atol=1e-8) or point.identifier not in point_mesh.point_nodes:
             raise RuntimeError("Packaged point force benchmark failed")
-        print("Structural smoke passed: real Gmsh, spawned P2 solver, axial benchmark, exact point force and .simuO roundtrip")
+        if np.linalg.norm(point_result.support_reactions[pin.identifier]["moment"]) > 1e-8:
+            raise RuntimeError("Packaged face pin moment benchmark failed")
+        print("Structural smoke passed: real Gmsh, spawned P2 solver, axial benchmark, exact point force, freely rotating face pin and typed .simuO roundtrip")
     return 0
 
 

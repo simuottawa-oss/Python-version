@@ -9,6 +9,7 @@ class StructuralInputs:
     material: object = None
     supports: tuple = ()
     support_names: tuple = ()
+    support_conditions: tuple = ()
     loads: tuple = ()
     point_loads: tuple = ()
     mesh_size: float = .05

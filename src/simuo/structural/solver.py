@@ -6,8 +6,9 @@ from skfem import Basis, FacetBasis, ElementTetP1, ElementTetP2, ElementVector, 
 from skfem.helpers import dot
 from skfem.models.elasticity import linear_elasticity
 
-from .meshing import validate_mesh
-from .models import AnalysisResult, point_load_key
+from .meshing import validate_mesh, bind_point_targets
+from .models import AnalysisResult, point_targets
+from .constraints import build_constraints, recover_support_reactions
 from .postprocessing import recover_stress
 
 
@@ -27,8 +28,7 @@ def solve_analysis(mesh, setup, progress=lambda text: None):
         raise ValueError("Geometry changed; import it again and reassign boundaries")
     if mesh.geometry_fingerprint != setup.geometry_fingerprint or mesh.settings != setup.mesh:
         raise ValueError("Mesh is out of date; generate it again")
-    if mesh.point_anchors != point_load_key(setup.point_loads):
-        raise ValueError("Point load locations changed; generate the mesh again")
+    bindings = bind_point_targets(mesh, point_targets(setup))
     validate_mesh(mesh)
     progress("Assembling quadratic elasticity")
     basis = make_basis(mesh)
@@ -53,7 +53,7 @@ def solve_analysis(mesh, setup, progress=lambda text: None):
                 return -pressure*dot(w.n, v)
         force += asm(surface, fb)
     for load in setup.point_loads:
-        node = mesh.point_nodes.get(load.identifier)
+        node = bindings.get(load.identifier)
         if node is None or not 0 <= node < len(mesh.points):
             raise ValueError("Point load is missing its mesh node")
         force[basis.nodal_dofs[:, node]] += np.asarray(load.force)
@@ -63,49 +63,41 @@ def solve_analysis(mesh, setup, progress=lambda text: None):
         def gravity(v, w):
             return np.einsum("i,i...->...", acceleration, v)
         force += asm(gravity, basis)
-    if not setup.supports:
-        raise ValueError("Select at least one fully clamped surface patch")
-    fixed = np.unique(np.concatenate([basis.get_dofs(facets=boundary_facets(basis, mesh, s)).all() for s in setup.supports]))
-    # Check the six rigid displacement modes at constrained components.
-    positions = basis.doflocs.T
-    center = mesh.points.mean(axis=0)
-    length = np.linalg.norm(np.ptp(mesh.points, axis=0))
-    rigid = np.empty((len(fixed), 6))
-    for row, dof in enumerate(fixed):
-        component = dof % 3
-        rigid[row, :3] = np.eye(3)[component]
-        rigid[row, 3:] = np.cross(np.eye(3), (positions[dof]-center)/length)[:, component]
-    if np.linalg.matrix_rank(rigid, tol=1e-10) < 6:
-        raise ValueError("Insufficient restraints: rigid-body motion remains")
-    free = np.setdiff1d(np.arange(basis.N), fixed)
+    constraints = build_constraints(basis, mesh, setup)
+    if constraints.reason:
+        raise ValueError(constraints.reason)
+    transform = constraints.transform
+    reduced = (transform.T@stiffness@transform).tocsc()
     solution = np.zeros(basis.N)
-    progress("Solving sparse displacement system")
+    progress("Solving constrained sparse displacement system")
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("error", MatrixRankWarning)
-            if len(free) == 0:
-                factor = None
-            else:
-                factor = splu(stiffness[free][:, free])
-            if factor is not None:
-                solution[free] = factor.solve(force[free])
-            # Iterative refinement uses the original, uncondensed system.
-            for _ in range(2 if factor is not None else 0):
-                solution[free] += factor.solve((force-stiffness@solution)[free])
+            if reduced.shape[0]:
+                factor = splu(reduced)
+                reduced_solution = factor.solve(np.asarray(transform.T@force).ravel())
+                for _ in range(2):
+                    reduced_solution += factor.solve(np.asarray(transform.T@(force-stiffness@(transform@reduced_solution))).ravel())
+                solution = np.asarray(transform@reduced_solution).ravel()
     except (RuntimeError, MatrixRankWarning) as error:
         raise ValueError("Singular stiffness system; check geometry and restraints") from error
     if not np.isfinite(solution).all():
         raise ValueError("Solver returned nonfinite displacements")
     residual = stiffness@solution-force
     reaction = np.zeros(basis.N)
-    reaction[fixed] = residual[fixed]
+    constrained_nodes = np.unique(np.concatenate(list(constraints.support_nodes.values())))
+    constrained_dofs = (3*constrained_nodes[:, None]+np.arange(3)).ravel()
+    reaction[constrained_dofs] = residual[constrained_dofs]
+    positions = basis.doflocs.T
+    center = mesh.points.mean(axis=0)
+    length = np.linalg.norm(np.ptp(mesh.points, axis=0))
     forces = force.reshape(-1, 3)
     reactions = reaction.reshape(-1, 3)
     dof_points = positions[::3]
     offsets = dof_points-center
     scale_force = max(float(np.linalg.norm(forces, axis=1).sum()), np.finfo(float).tiny)
     scale_moment = scale_force*length
-    residual_error = float(np.linalg.norm(residual[free])/scale_force)
+    residual_error = float(np.linalg.norm(transform.T@residual)/scale_force)
     force_error = float(np.linalg.norm((forces+reactions).sum(axis=0))/scale_force)
     moment_error = float(np.linalg.norm(np.cross(offsets, forces+reactions).sum(axis=0))/scale_moment)
     if max(residual_error, force_error, moment_error) > 1e-8 or not np.isfinite([residual_error, force_error, moment_error]).all():
@@ -115,6 +107,10 @@ def solve_analysis(mesh, setup, progress=lambda text: None):
     result = AnalysisResult(solution[basis.nodal_dofs].T, stress, vm, averaged, averaged_vm,
                             reactions, dof_points, solution, residual_error, force_error, moment_error,
                             forces.sum(axis=0), np.cross(offsets, forces).sum(axis=0))
+    result.support_reactions = recover_support_reactions(constraints, basis, reaction)
+    for support in constraints.supports:
+        if support.kind == "pinned_face" and np.linalg.norm(result.support_reactions[support.identifier]["moment"])/scale_moment > 1e-8:
+            raise ValueError("Pinned support failed its zero-moment check")
     root = np.average(mesh.points, axis=0)
     if setup.beam:
         from .beam import beam_frame, section_moments

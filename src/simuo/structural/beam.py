@@ -3,6 +3,7 @@ import itertools
 import numpy as np
 
 from .postprocessing import constitutive
+from .models import all_supports
 
 
 def beam_frame(mesh, setup):
@@ -27,7 +28,10 @@ def beam_frame(mesh, setup):
     all_tip = set(np.flatnonzero(np.max(np.abs(x-length), axis=1) < tolerance))
     if set(root_ids) != all_root or set(tip_ids) != all_tip:
         raise ValueError("Select each complete beam end, including every end patch")
-    fixed = set(int(i) for s in setup.supports for i in mesh.selected_boundary(s))
+    conditions = all_supports(setup)
+    if any(s.kind != "fixed_face" for s in conditions):
+        raise ValueError("Beam diagrams require one complete fixed end; point/pinned supports retain solid stress analysis")
+    fixed = set(int(i) for s in conditions for i in mesh.selected_boundary(s.triangles))
     if fixed != all_root:
         raise ValueError("Beam diagrams require exactly one complete end clamp and no other supports")
     sides = np.array(sorted(set(range(len(triangles)))-all_root-all_tip), dtype=int)

@@ -38,6 +38,17 @@ def tool_icon(kind):
         painter.drawLine(8, 12, 17, 3)
         painter.drawLine(12, 3, 17, 3)
         painter.drawLine(17, 3, 17, 8)
+    elif kind == "fixed_point":
+        painter.drawEllipse(7, 5, 6, 6)
+        painter.drawLine(10, 11, 4, 17)
+        painter.drawLine(10, 11, 16, 17)
+        painter.drawLine(3, 17, 17, 17)
+    elif kind == "pinned_face":
+        painter.drawLine(3, 4, 17, 4)
+        painter.drawEllipse(8, 5, 4, 4)
+        painter.drawLine(10, 9, 4, 16)
+        painter.drawLine(10, 9, 16, 16)
+        painter.drawLine(3, 17, 17, 17)
     elif kind == "clamp":
         painter.drawLine(5, 3, 5, 17)
         for y in (4, 8, 12, 16):

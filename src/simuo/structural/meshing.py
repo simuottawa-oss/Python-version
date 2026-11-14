@@ -75,12 +75,39 @@ def classify_patches(geometry, settings):
 
 def point_position(geometry, load):
     if load.source_triangle >= len(geometry.triangles):
-        raise ValueError("Point load source triangle changed; reassign the point")
+        raise ValueError("Point target source triangle changed; reassign the point")
     return np.asarray(load.barycentric) @ geometry.points[geometry.triangles[load.source_triangle]]
+
+
+def bind_point_targets(mesh, targets, geometry=None):
+    """Bind current identities to existing boundary vertices, without remeshing."""
+    from scipy.spatial import cKDTree
+    targets = tuple(targets)
+    if not targets:
+        return {}
+    source_points = geometry.points if geometry is not None else mesh.source_points
+    source_triangles = geometry.triangles if geometry is not None else mesh.source_triangles
+    if source_points is None or source_triangles is None:
+        raise ValueError("Mesh lacks point-anchor geometry; generate it again")
+    boundary = np.unique(mesh.boundary_triangles)
+    tree = cKDTree(mesh.points[boundary])
+    tolerance = float(np.linalg.norm(np.ptp(source_points, axis=0)))*1e-10
+    mapping = {}
+    for target in targets:
+        if target.source_triangle >= len(source_triangles):
+            raise ValueError("Point source triangle changed; reassign the point")
+        position = np.asarray(target.barycentric)@source_points[source_triangles[target.source_triangle]]
+        distance, nearest = tree.query(position)
+        if distance > tolerance:
+            raise ValueError("Point locations changed; mesh update required")
+        mapping[target.identifier] = int(boundary[nearest])
+    return mapping
 
 
 def insert_point_nodes(mesh, geometry, loads):
     """Conforming subdivision of boundary face/edge stars; keep exact SI anchors."""
+    mesh.source_points = geometry.points
+    mesh.source_triangles = geometry.triangles
     mesh.point_anchors = point_load_key(loads)
     mesh.point_nodes = {}
     tolerance = float(np.linalg.norm(geometry.dimensions))*1e-10

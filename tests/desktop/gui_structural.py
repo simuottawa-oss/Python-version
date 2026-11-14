@@ -88,7 +88,7 @@ def main():
                 QTest.mouseClick(viewport, Qt.MouseButton.LeftButton, pos=QPoint(viewport.width()//2, viewport.height()//2))
                 window.force_fields[1].setValue(-100)
                 assert window.apply_load_button.isEnabled()
-                window.apply_load_button.click()
+                window.commit_load()
                 assert len(window.point_loads) == 1
                 def wait():
                     deadline = time.monotonic()+30
@@ -96,13 +96,59 @@ def main():
                         app.processEvents()
                         time.sleep(.01)
                     assert not window.job.running, "Desktop analysis worker timed out"
-                window.generate_mesh()
+                window.generate_action.trigger()
+                wait()
+                assert window.result is None
+                window.solve_action.trigger()
                 wait()
                 assert window.mesh is not None
                 assert window.point_loads[0].identifier in window.mesh.point_nodes
+                assert window.result is not None and window.result.force_error < 1e-8
+                # Navigation works with the viewport focused, without RMB.
+                viewport.setFocus()
+                app.processEvents()
+                position = np.array(viewport.camera.position)
+                QTest.keyPress(viewport, Qt.Key_Space)
+                viewport.navigate()
+                QTest.keyRelease(viewport, Qt.Key_Space)
+                assert viewport.camera.position.y > position[1]
+                position = np.array(viewport.camera.position)
+                QTest.keyPress(viewport, Qt.Key_Alt)
+                viewport.navigate()
+                QTest.keyRelease(viewport, Qt.Key_Alt)
+                assert viewport.camera.position.y < position[1]
+                assert not viewport.keys and viewport.hasFocus(), "Alt left camera moving or activated the menu"
+                mesh_before = window.mesh
+                window.force_fields[1].setValue(-150)
+                window.force_fields[1].editingFinished.emit()
+                QTest.qWait(500)
+                assert not window.job.running and window.result is None
+                assert window.mesh is mesh_before
                 window.solve()
                 wait()
-                assert window.result is not None and window.result.force_error < 1e-8
+                assert window.result is not None
+                assert np.isclose(window.result.applied_force[1], -150)
+                window.stress_range.setCurrentIndex(1)
+                window.stress_max.setValue(window.result.averaged_von_mises.max()/2)
+                window.stress_scale_changed()
+                viewport.grabFramebuffer()
+                assert viewport.saturated > 0
+                window.stress_range.setCurrentIndex(0)
+                computed_frame = viewport.grabFramebuffer()
+                values = window.result.averaged_von_mises
+                print(f"Computed display field: {values.min():.6g}..{values.max():.6g}; scaled max {viewport.maximum:.6g}", flush=True)
+                assert computed_frame.save("/tmp/simuo-live-computed-stress.png")
+                # Fixed-point tools share exact picking and render their own marker.
+                window.activate_tool("fixed_point")
+                QTest.mouseClick(viewport, Qt.MouseButton.LeftButton, pos=QPoint(viewport.width()//2, viewport.height()//2))
+                assert len(viewport.point_supports) == 1
+                assert window._selection[0] == "support"
+                app.processEvents()
+                assert window.grab().save("/tmp/simuo-live-fixed-point.png")
+                window.remove_selected()
+                assert window.mesh is mesh_before and window.mesh_current()
+                window.solve()
+                wait()
                 target = str(Path(directory)/"point-design.simuO")
                 with patch("simuo.ui.structural_window.QFileDialog.getSaveFileName", return_value=(target, "")), patch("simuo.ui.recent_projects.QSettings", return_value=settings), patch("simuo.ui.recent_projects.thumbnail_path", return_value=Path(directory)/"preview.png"):
                     assert window.save()

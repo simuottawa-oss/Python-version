@@ -21,6 +21,11 @@ and fingerprint, import units, material snapshot, supports, named surface and
 point loads, gravity, mesh settings and optional beam configuration. Point loads
 store a stable identifier, source-triangle index, barycentric location and XYZ
 force in N. Their mesh-node numbers are regenerated and are never persisted.
+Structural `setup_version: 2` adds `support_conditions`, each with a stable
+identifier, name and kind (`fixed_face`, `pinned_face` or `fixed_point`). Face
+supports retain source-triangle selections; fixed points retain source-triangle
+and barycentric anchors. The outer `.simuO` format remains version 2. Missing
+setup versions and legacy tuple supports remain readable as fixed faces.
 Meshes and results are also regenerated after opening.
 
 Legacy `.simuOAnalysis` version 1 remains readable. Save offers a `.simuO`
