@@ -39,6 +39,26 @@ class InteractionOverlay(QWidget):
                 painter.drawPolygon(polygon([b, *sides]))
                 label = b+(b-a)/math.hypot(*(b-a))*11
                 painter.drawText(QPointF(float(label[0]-4), float(label[1]+4)), handle.key.upper())
+        corners = self.viewport.origin_pick_corners()
+        if corners:
+            projection = self.viewport.projection()
+            projected = {}
+            for signs, world_point in corners:
+                screen = projection.point(world_point)
+                if screen is not None and -1 <= screen[2] <= 1:
+                    projected[signs] = screen[:2]
+            painter.setPen(QPen(QColor('#79baff'), 1, Qt.PenStyle.DashLine))
+            for a_signs, a in projected.items():
+                for axis in range(3):
+                    b_signs = tuple(-s if i == axis else s for i, s in enumerate(a_signs))
+                    b = projected.get(b_signs)
+                    if b is not None and a_signs < b_signs:
+                        painter.drawLine(QPointF(*a), QPointF(*b))
+            painter.setPen(Qt.PenStyle.NoPen)
+            for signs, point in projected.items():
+                hovered = signs == self.viewport.hovered_corner
+                painter.setBrush(QColor('#f5db7c' if hovered else '#79baff'))
+                painter.drawEllipse(QPointF(*point), 6 if hovered else 5, 6 if hovered else 5)
         rect = self.viewport.box_rect()
         if rect is not None:
             painter.setPen(QPen(QColor('#79baff'), 1, Qt.PenStyle.DashLine))

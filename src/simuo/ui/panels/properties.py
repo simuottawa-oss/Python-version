@@ -301,6 +301,34 @@ class PropertiesPanel(QWidget):
         self.mesh_name.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         mesh_layout.addWidget(self.mesh_name)
         form.addWidget(self.mesh_section)
+
+        self.origin_section = InspectorSection("Origin")
+        origin_layout = QVBoxLayout(self.origin_section.body)
+        origin_layout.setContentsMargins(10, 10, 10, 10)
+        origin_layout.setSpacing(6)
+        self.origin_hint = QLabel()
+        self.origin_hint.setWordWrap(True)
+        origin_layout.addWidget(self.origin_hint)
+        origin_buttons = QHBoxLayout()
+        self.origin_pick_button = QPushButton("Set Origin…")
+        self.origin_pick_button.setAccessibleName("Set move gizmo origin")
+        self.origin_pick_button.setToolTip(
+            "Click a corner of the object's bounding box in the viewport "
+            "to anchor the move gizmo there"
+        )
+        self.origin_pick_button.clicked.connect(self._toggle_origin_pick)
+        origin_buttons.addWidget(self.origin_pick_button)
+        self.origin_reset_button = QPushButton("Reset")
+        self.origin_reset_button.setAccessibleName("Reset move gizmo origin to center")
+        self.origin_reset_button.setToolTip("Anchor the move gizmo back at the bounding-box center")
+        self.origin_reset_button.clicked.connect(
+            lambda: self.state.set_mover_origin(self._displayed_id, None)
+        )
+        origin_buttons.addWidget(self.origin_reset_button)
+        origin_layout.addLayout(origin_buttons)
+        form.addWidget(self.origin_section)
+        state.origin_pick_changed.connect(self._refresh_origin)
+
         form.addStretch()
         self.scroll.setWidget(content)
         self.stack.addWidget(self.scroll)
@@ -338,6 +366,33 @@ class PropertiesPanel(QWidget):
         }
         changes = defaults if attribute is None else {attribute: defaults[attribute]}
         self.state.set_physics_properties(obj.identifier, **changes)
+
+    def _toggle_origin_pick(self):
+        if self._displayed_id is None:
+            return
+        if self.state.origin_pick_id == self._displayed_id:
+            self.state.cancel_pick_origin()
+        else:
+            self.state.begin_pick_origin(self._displayed_id)
+
+    def _refresh_origin(self, *_args):
+        obj = self.state.find_object(self._displayed_id) if len(self._displayed_ids) == 1 else None
+        self._show_origin(obj)
+
+    def _show_origin(self, obj):
+        self.origin_section.setVisible(obj is not None)
+        if obj is None:
+            return
+        picking = self.state.origin_pick_id == obj.identifier
+        self.origin_pick_button.setText("Picking… (Esc cancels)" if picking else "Set Origin…")
+        self.origin_pick_button.setEnabled(picking or self.state.origin_pick_id is None)
+        self.origin_reset_button.setEnabled(not picking and obj.origin_corner is not None)
+        if obj.origin_corner is None:
+            self.origin_hint.setText("Move gizmo anchored at the bounding-box center.")
+        else:
+            parts = [f"{axis} {'max' if sign > 0 else 'min'}"
+                     for axis, sign in zip("XYZ", obj.origin_corner)]
+            self.origin_hint.setText("Move gizmo anchored at corner: " + ", ".join(parts) + ".")
 
     def _show_physics(self, obj):
         self.physics_hint.setVisible(obj is None)
@@ -378,6 +433,7 @@ class PropertiesPanel(QWidget):
         self._displayed_id = obj.identifier if obj is not None else None
         self._displayed_ids = self.state.selected_ids
         self._show_physics(obj if len(self._displayed_ids) == 1 else None)
+        self._show_origin(obj if len(self._displayed_ids) == 1 else None)
         selected = self.state.selected_objects
         multiple = len(selected) > 1
         self.stack.setCurrentIndex(1 if obj is not None else 0)

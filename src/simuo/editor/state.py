@@ -24,6 +24,7 @@ class EditorState(QObject):
     tool_changed = Signal(str)
     tool_options_changed = Signal(object)
     transform_ended = Signal()
+    origin_pick_changed = Signal(object)  # Identifier being picked, or None.
 
     def __init__(self, scene, parent=None):
         super().__init__(parent)
@@ -36,6 +37,7 @@ class EditorState(QObject):
         self.active_tool = "select"
         self.tool_options = {"xray": False}
         self._transform = None
+        self._origin_pick_id = None
         self._base_dirty = scene.dirty
         self.undo_stack = QUndoStack(self)
         self.undo_stack.indexChanged.connect(self._history_changed)
@@ -110,6 +112,10 @@ class EditorState(QObject):
         return self._selected_ids
 
     @property
+    def origin_pick_id(self):
+        return self._origin_pick_id
+
+    @property
     def selected_objects(self):
         objects = {obj.identifier: obj for obj in self.scene.objects}
         return tuple(objects[key] for key in self._selected_ids if key in objects)
@@ -128,6 +134,7 @@ class EditorState(QObject):
         identifiers = tuple(dict.fromkeys(key for key in identifiers if key in valid))
         if identifiers != self._selected_ids:
             self.cancel_transform()
+            self.cancel_pick_origin()
             self._selected_ids = identifiers
             self._emit_selection()
 
@@ -399,8 +406,28 @@ class EditorState(QObject):
             raise ValueError("Unknown viewport tool")
         if tool != self.active_tool:
             self.cancel_transform()
+            self.cancel_pick_origin()
             self.active_tool = tool
             self.tool_changed.emit(tool)
+
+    def begin_pick_origin(self, identifier):
+        if len(self.selected_ids) != 1 or identifier != self.selected_ids[0]:
+            return
+        if identifier != self._origin_pick_id:
+            self._origin_pick_id = identifier
+            self.origin_pick_changed.emit(identifier)
+
+    def cancel_pick_origin(self):
+        if self._origin_pick_id is not None:
+            self._origin_pick_id = None
+            self.origin_pick_changed.emit(None)
+
+    def set_mover_origin(self, identifier, signs):
+        obj = self.find_object(identifier)
+        if obj is not None and obj.origin_corner != signs:
+            obj.origin_corner = signs
+            self.object_changed.emit(obj)
+        self.cancel_pick_origin()
 
     def set_tool_options(self, **updates):
         options = {**self.tool_options, **updates}

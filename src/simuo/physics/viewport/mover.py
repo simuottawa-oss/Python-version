@@ -39,6 +39,42 @@ HEAD_RADIUS = 0.13
 # is from the gizmo - a known v1 simplification (see plan notes).
 PICK_RADIUS = 0.2
 
+# All 8 combinations of (min, max) per axis, as -1/1 signs picking localMin
+# or localMax respectively. Shared by Mover.world_center() (origin override)
+# and by the origin-picker UI (which corner the user clicked).
+CORNER_SIGNS = [(sx, sy, sz) for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)]
+
+
+def world_corners(scene_object):
+    """The 8 bounding-box corners of a scene object, in world space right now.
+
+    Uses the same axis-aligned, rotation-ignoring simplification as
+    Mover.world_center()/half_extent(), so a corner picked here lines up with
+    where the move gizmo will actually anchor.
+
+    Args:
+        scene_object: SceneObject whose cached mesh bounds to use.
+
+    Returns:
+        list[tuple[tuple[int, int, int], glm.vec3]]: (signs, world_point)
+        pairs, one per corner. Empty if the object has no mesh bounds yet.
+    """
+    if scene_object.localMin is None:
+        return []
+
+    local_min = glm.vec3(*scene_object.localMin)
+    local_max = glm.vec3(*scene_object.localMax)
+    position = glm.vec3(*scene_object.position)
+    scale = glm.vec3(*scene_object.scale)
+
+    corners = []
+    for signs in CORNER_SIGNS:
+        local_point = glm.vec3(*(
+            local_min[i] if signs[i] < 0 else local_max[i] for i in range(3)
+        ))
+        corners.append((signs, position + local_point * scale))
+    return corners
+
 
 def _perpendicular_basis(direction):
     """Build two unit vectors perpendicular to `direction` and to each other.
@@ -238,13 +274,24 @@ class Mover:
         self.dragging_axis = None
 
     def world_center(self):
-        """Where the object's bounding-box middle sits in world space right now."""
+        """Where the gizmo is anchored in world space right now.
+
+        Normally the object's bounding-box middle, but a user-chosen corner
+        (SceneObject.origin_corner) overrides that if set.
+        """
         obj = self.scene_object
 
         if obj.localMin is None:
             # No mesh bounds yet (e.g. mesh still loading) — fall back to the
             # object's raw position so the gizmo doesn't crash.
             return glm.vec3(*obj.position)
+
+        if obj.origin_corner is not None:
+            signs = obj.origin_corner
+            local_point = glm.vec3(*(
+                obj.localMin[i] if signs[i] < 0 else obj.localMax[i] for i in range(3)
+            ))
+            return glm.vec3(*obj.position) + local_point * glm.vec3(*obj.scale)
 
         local_center = (glm.vec3(*obj.localMin) + glm.vec3(*obj.localMax)) * 0.5
         return glm.vec3(*obj.position) + local_center * glm.vec3(*obj.scale)
