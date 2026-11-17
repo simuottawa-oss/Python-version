@@ -84,6 +84,7 @@ class SimuOMainWindow(QMainWindow):
         self.setCentralWidget(self.viewport)
         self.createToolbar()
         self.createTemporaryPartsPanel()
+        self.createDebugPanel()
         self.viewport.object_picked.connect(self.onViewportPicked)
         self.viewport.box_selection_requested.connect(self.editor_state.select_many)
         self.viewport.transform_started.connect(self.editor_state.begin_transform)
@@ -215,6 +216,23 @@ class SimuOMainWindow(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, self.temporaryPartsDock)
         self.windowMenu.addAction(self.temporaryPartsDock.toggleViewAction())
         self.temporaryPartsDock.hide()
+    def createDebugPanel(self):
+        """Create a dock showing debug information for the current scene.
+
+        Returns:
+            None. Adds its visibility action to the Window menu.
+        """
+        self.debugDock = QDockWidget("Debug Info", self)
+        panel = QWidget(self)
+        layout = QVBoxLayout(panel)
+        self.debugLabel = QLabel(panel)
+        self.debugLabel.setWordWrap(True)
+        self.debugLabel.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(self.debugLabel)
+        self.debugDock.setWidget(panel)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.debugDock)
+        self.windowMenu.addAction(self.debugDock.toggleViewAction())
+        self.debugDock.hide()
 
     def active_temporary_parts(self):
         paths = {Path(obj.meshPath).resolve() for obj in self.scene.objects if obj.meshPath}
