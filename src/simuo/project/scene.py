@@ -55,6 +55,9 @@ class SceneObject:
         self.scale = [1.0, 1.0, 1.0]
         self.localMin = None
         self.localMax = None
+        # Move-gizmo anchor override: (sx, sy, sz) of -1/1 picking min/max per
+        # axis, or None for the default bounding-box center. Session-only.
+        self.origin_corner = None
 
     # -------------------------------------------------
     # Dynamic Properties

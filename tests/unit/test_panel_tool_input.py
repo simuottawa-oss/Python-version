@@ -28,6 +28,7 @@ class ToolInput(unittest.TestCase):
         self.objects = [SceneObject('Left'), SceneObject('Right')]
         for obj, x in zip(self.objects, (-2, 2)):
             obj.position[0] = x
+            obj.localMin, obj.localMax = self.mesh.minimum, self.mesh.maximum
             self.scene.addObject(obj)
         self.state = EditorState(self.scene)
         self.viewport = OpenGLViewport(scene=self.scene)
@@ -63,6 +64,15 @@ class ToolInput(unittest.TestCase):
         start = handle.points[-1]
         self.mouse(QEvent.Type.MouseButtonPress, start)
         self.mouse(QEvent.Type.MouseMove, start + [50, 10])
+        return start
+
+    def start_rotate(self):
+        self.state.select(self.objects[0].identifier)
+        self.state.set_tool('rotate')
+        handle = next(h for h in self.viewport.gizmo().handles if h.key == 'z')
+        start = handle.points[0]
+        self.mouse(QEvent.Type.MouseButtonPress, start)
+        self.mouse(QEvent.Type.MouseMove, handle.points[len(handle.points) // 4])
         return start
 
     def test_drag_commits_on_release_and_freezes_camera(self):
@@ -101,6 +111,50 @@ class ToolInput(unittest.TestCase):
                 np.testing.assert_allclose(self.objects[0].position, [-2, 0, 0])
                 self.assertEqual(self.state.undo_stack.count(), 0)
                 self.assertFalse(self.scene.dirty)
+
+    def test_rotate_drag_commits_on_release(self):
+        start = self.start_rotate()
+        self.assertIsNotNone(self.viewport.drag)
+        self.assertNotEqual(self.objects[0].rotation, [0, 0, 0])
+        self.assertEqual(self.state.undo_stack.count(), 0)
+        self.mouse(QEvent.Type.MouseButtonRelease, start + [0, 1])
+        self.assertEqual(self.state.undo_stack.count(), 1)
+        self.assertIsNone(self.viewport.drag)
+        self.state.undo_stack.undo()
+        np.testing.assert_allclose(self.objects[0].rotation, [0, 0, 0], atol=1e-6)
+        self.assertFalse(self.scene.dirty)
+
+    def test_rotate_escape_right_click_focus_loss_and_tool_switch_cancel(self):
+        for cancel in (lambda: self.key(Qt.Key_Escape),
+                       lambda: self.mouse(QEvent.Type.MouseButtonPress, (200, 200), button=Qt.RightButton),
+                       lambda: QApplication.sendEvent(self.viewport, QFocusEvent(QEvent.Type.FocusOut)),
+                       lambda: self.state.set_tool('select')):
+            with self.subTest(cancel=cancel):
+                self.start_rotate()
+                cancel()
+                self.assertIsNone(self.viewport.drag)
+                np.testing.assert_allclose(self.objects[0].rotation, [0, 0, 0], atol=1e-6)
+                self.assertEqual(self.state.undo_stack.count(), 0)
+                self.assertFalse(self.scene.dirty)
+
+    def test_origin_pick_only_begins_in_move_tool(self):
+        self.state.select(self.objects[0].identifier)
+        for tool in ('select', 'rotate'):
+            self.state.set_tool(tool)
+            self.state.begin_pick_origin(self.objects[0].identifier)
+            self.assertIsNone(self.state.origin_pick_id)
+        self.state.set_tool('move')
+        self.state.begin_pick_origin(self.objects[0].identifier)
+        self.assertEqual(self.state.origin_pick_id, self.objects[0].identifier)
+        # Switching away from Move cancels any pick already in progress.
+        self.state.set_tool('select')
+        self.assertIsNone(self.state.origin_pick_id)
+
+    def test_rotate_has_no_handles_for_multiple_selected_objects(self):
+        self.state.set_tool('rotate')
+        self.state.select_many(obj.identifier for obj in self.objects)
+        self.assertIsNone(self.viewport.gizmo())
+        self.assertEqual(self.state.selected_objects, tuple(self.objects))
 
     def test_framing_cancels_preview_before_moving_camera(self):
         self.start_move()
