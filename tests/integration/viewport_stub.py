@@ -14,6 +14,8 @@ class ViewportStub(QWidget):
     frame_scene_requested = Signal()
     escape_requested = Signal()
     tools_visibility_requested = Signal()
+    origin_picked = Signal(str, object)
+    origin_pick_cancelled = Signal()
 
     def __init__(self, parent=None, scene=None):
         super().__init__(parent)
@@ -31,6 +33,9 @@ class ViewportStub(QWidget):
         pass
 
     def set_tool_options(self, options):
+        pass
+
+    def set_origin_pick(self, identifier):
         pass
 
     def discard_transform(self):
