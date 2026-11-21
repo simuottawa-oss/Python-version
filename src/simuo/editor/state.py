@@ -402,7 +402,7 @@ class EditorState(QObject):
         return True
 
     def set_tool(self, tool):
-        if tool not in ("select", "move"):
+        if tool not in ("select", "move", "rotate"):
             raise ValueError("Unknown viewport tool")
         if tool != self.active_tool:
             self.cancel_transform()
@@ -411,6 +411,8 @@ class EditorState(QObject):
             self.tool_changed.emit(tool)
 
     def begin_pick_origin(self, identifier):
+        if self.active_tool != "move":
+            return
         if len(self.selected_ids) != 1 or identifier != self.selected_ids[0]:
             return
         if identifier != self._origin_pick_id:

@@ -6,6 +6,8 @@ from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import QWidget
 
+from simuo.rendering.manipulation import MoveGizmo, RotateDrag, RotateGizmo
+
 
 def polygon(points):
     return QPolygonF([QPointF(float(point[0]), float(point[1])) for point in points])
@@ -22,23 +24,40 @@ class InteractionOverlay(QWidget):
     def viewport(self):
         return self.parentWidget()
 
+    def _draw_move(self, painter, gizmo, active):
+        for handle in gizmo.handles:
+            color = QColor('#f5db7c' if handle.key == active else handle.color)
+            painter.setPen(QPen(color, 3 if handle.key == active else 2))
+            a, b = handle.points
+            painter.drawLine(QPointF(*a), QPointF(*b))
+            angle = math.atan2(*(b-a)[::-1])
+            sides = [(b[0]-10*math.cos(angle+offset), b[1]-10*math.sin(angle+offset)) for offset in (-.45, .45)]
+            painter.setBrush(color)
+            painter.drawPolygon(polygon([b, *sides]))
+            label = b+(b-a)/math.hypot(*(b-a))*11
+            painter.drawText(QPointF(float(label[0]-4), float(label[1]+4)), handle.key.upper())
+
+    def _draw_rotate(self, painter, gizmo, active, drag):
+        dragging_key = drag.handle.key if drag is not None else None
+        for handle in gizmo.handles:
+            if dragging_key is not None and handle.key != dragging_key:
+                continue  # the other two handles hide until this drag ends
+            hovered = handle.key == active
+            color = QColor('#f5db7c' if hovered else handle.color)
+            painter.setPen(QPen(color, 3 if hovered else 2))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPolygon(polygon(handle.points))
+
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         gizmo = self.viewport.gizmo()
         active = self.viewport.drag.handle.key if self.viewport.drag is not None else self.viewport.hover_handle
-        if gizmo is not None:
-            for handle in gizmo.handles:
-                color = QColor('#f5db7c' if handle.key == active else handle.color)
-                painter.setPen(QPen(color, 3 if handle.key == active else 2))
-                a, b = handle.points
-                painter.drawLine(QPointF(*a), QPointF(*b))
-                angle = math.atan2(*(b-a)[::-1])
-                sides = [(b[0]-10*math.cos(angle+offset), b[1]-10*math.sin(angle+offset)) for offset in (-.45, .45)]
-                painter.setBrush(color)
-                painter.drawPolygon(polygon([b, *sides]))
-                label = b+(b-a)/math.hypot(*(b-a))*11
-                painter.drawText(QPointF(float(label[0]-4), float(label[1]+4)), handle.key.upper())
+        if isinstance(gizmo, MoveGizmo):
+            self._draw_move(painter, gizmo, active)
+        elif isinstance(gizmo, RotateGizmo):
+            drag = self.viewport.drag if isinstance(self.viewport.drag, RotateDrag) else None
+            self._draw_rotate(painter, gizmo, active, drag)
         corners = self.viewport.origin_pick_corners()
         if corners:
             projection = self.viewport.projection()

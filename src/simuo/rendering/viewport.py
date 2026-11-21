@@ -18,7 +18,7 @@ from simuo.rendering.geometry import create_axis_lines
 from simuo.rendering.picking import PickMesh, object_matrix, pick_object
 from simuo.rendering.ray import Ray
 from simuo.rendering.outline import SelectionOutline
-from simuo.rendering.manipulation import MoveDrag, MoveGizmo, Projection, box_candidates
+from simuo.rendering.manipulation import MoveDrag, MoveGizmo, Projection, RotateDrag, RotateGizmo, box_candidates
 from simuo.rendering.overlays import InteractionOverlay
 from simuo.physics.viewport.mover import world_corners
 from simuo.rendering.selection_buffer import SelectionBuffer
@@ -221,7 +221,7 @@ class OpenGLViewport(QOpenGLWidget):
         return Projection(self.camera, self.width(), self.height())
 
     def gizmo(self):
-        if self.active_tool != "move" or len(self.selected_objects) != 1:
+        if self.active_tool not in ("move", "rotate") or len(self.selected_objects) != 1:
             return None
         obj = self.selected_objects[0]
         if not obj.viewport_visible or obj.viewport_locked:
@@ -229,7 +229,9 @@ class OpenGLViewport(QOpenGLWidget):
         for item in self.renderObjects:
             mesh = item.get('pick_mesh')
             if item['SceneObject'] is obj and mesh is not None and len(mesh.triangles):
-                return MoveGizmo(obj, self.projection())
+                if self.active_tool == "move":
+                    return MoveGizmo(obj, self.projection())
+                return RotateGizmo(obj, self.projection())
         return None
 
     def box_rect(self):
@@ -1093,8 +1095,13 @@ class OpenGLViewport(QOpenGLWidget):
             handle = gizmo.hit(point) if gizmo is not None else None
             modifiers = event.modifiers() & (Qt.ControlModifier | Qt.MetaModifier | Qt.ShiftModifier | Qt.AltModifier)
             if handle is not None and not modifiers:
-                self.drag = MoveDrag(gizmo, handle, point)
-                self.transform_started.emit((gizmo.mover.scene_object.identifier,), 'Move Object')
+                if isinstance(gizmo, MoveGizmo):
+                    self.drag = MoveDrag(gizmo, handle, point)
+                    label = 'Move Object'
+                else:
+                    self.drag = RotateDrag(gizmo, handle, point)
+                    label = 'Rotate Object'
+                self.transform_started.emit((gizmo.mover.scene_object.identifier,), label)
                 if self.isVisible():
                     self.grabMouse()
                 self.interaction_overlay.update()

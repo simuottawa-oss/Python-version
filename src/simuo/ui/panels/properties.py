@@ -328,6 +328,7 @@ class PropertiesPanel(QWidget):
         origin_layout.addLayout(origin_buttons)
         form.addWidget(self.origin_section)
         state.origin_pick_changed.connect(self._refresh_origin)
+        state.tool_changed.connect(self._refresh_origin)
 
         form.addStretch()
         self.scroll.setWidget(content)
@@ -384,8 +385,13 @@ class PropertiesPanel(QWidget):
         if obj is None:
             return
         picking = self.state.origin_pick_id == obj.identifier
+        move_tool = self.state.active_tool == "move"
         self.origin_pick_button.setText("Picking… (Esc cancels)" if picking else "Set Origin…")
-        self.origin_pick_button.setEnabled(picking or self.state.origin_pick_id is None)
+        self.origin_pick_button.setEnabled(move_tool and (picking or self.state.origin_pick_id is None))
+        self.origin_pick_button.setToolTip(
+            "Click a corner of the object's bounding box in the viewport to anchor the move gizmo there"
+            if move_tool else "Switch to the Move tool to set the move gizmo's origin"
+        )
         self.origin_reset_button.setEnabled(not picking and obj.origin_corner is not None)
         if obj.origin_corner is None:
             self.origin_hint.setText("Move gizmo anchored at the bounding-box center.")

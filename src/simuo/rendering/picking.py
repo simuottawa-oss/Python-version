@@ -4,11 +4,17 @@ import glm
 import numpy as np
 
 
+def rotation_matrix(rotation):
+    """Pure rotation (no translate/scale) for Euler XYZ degrees, same order as object_matrix."""
+    model = glm.mat4(1.0)
+    for angle, axis in zip(rotation, ((1, 0, 0), (0, 1, 0), (0, 0, 1))):
+        model = glm.rotate(model, glm.radians(angle), glm.vec3(*axis))
+    return model
+
+
 def object_matrix(obj):
     """Keep rendering and picking on the same translation/rotation/scale order."""
-    model = glm.translate(glm.mat4(1.0), glm.vec3(*obj.position))
-    for angle, axis in zip(obj.rotation, ((1, 0, 0), (0, 1, 0), (0, 0, 1))):
-        model = glm.rotate(model, glm.radians(angle), glm.vec3(*axis))
+    model = glm.translate(glm.mat4(1.0), glm.vec3(*obj.position)) * rotation_matrix(obj.rotation)
     return glm.scale(model, glm.vec3(*obj.scale))
 
 
