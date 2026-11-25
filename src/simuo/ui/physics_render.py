@@ -10,9 +10,10 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
 
 from simuo.parts.part_format import Part
 from simuo.parts.part_assets import PartAsset, box_vertices
-from simuo.physics.physics_world import PhysicsWorld, quaternion
+from simuo.physics.physics_world import PhysicsWorld
 from simuo.physics.viewport.renderer import OpenGLViewport
 from simuo.project.scene import Scene, SceneObject
+from simuo.project.transforms import rotation_matrix
 
 
 class PhysicsRenderWindow(QMainWindow):
@@ -117,7 +118,7 @@ class PhysicsRenderWindow(QMainWindow):
         points = []
         for obj in self.world.scene.objects:
             local = obj.asset.vertices.reshape(-1,6)[:,:3]*np.asarray(obj.scale)
-            rotation = np.asarray(self.world.bullet.getMatrixFromQuaternion(quaternion(obj.rotation))).reshape(3,3)
+            rotation = rotation_matrix(obj.rotation)
             points.extend(local @ rotation.T + np.asarray(obj.position))
         if not points:
             return
@@ -240,7 +241,7 @@ class PhysicsRenderWindow(QMainWindow):
         self.stats.setText(label + ("\n"+" | ".join(speeds[:5]) if speeds else ""))
 
     def closeEvent(self, event):
-        """Stop both timers, release uploaded scene buffers, disconnect Bullet, and accept
+        """Stop both timers, release uploaded scene buffers, close the physics world, and accept
         window closure.
 
         Args:

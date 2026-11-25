@@ -47,11 +47,10 @@ def main():
                 assert moving.body_type == "kinematic"
                 assert abs(moving.velocity[0] - (1 + 2 * world.time)) < 1e-8
                 assert moving.position[0] > window.scene.objects[0].position[0]
-                settings = world.bullet.getDynamicsInfo(world.bodies[0], -1, physicsClientId=world.client)
-                assert abs(settings[5]-.8) < 1e-8
+                assert abs(moving.restitution-.8) < 1e-8
                 assert not render.viewport.grabFramebuffer().isNull()
                 assert window.scene.objects[0].velocity == [1, 2, -3]
-                print('PASS edited bounce reaches Bullet; live Render and source-scene isolation', flush=True)
+                print('PASS edited bounce reaches the simulation snapshot; live Render and source-scene isolation', flush=True)
                 passed.append(True)
             except BaseException:
                 error_hook(*sys.exc_info())

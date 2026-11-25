@@ -11,9 +11,8 @@ Set up your environment once, then use the [Run](#run) section to open the app.
 ## Windows setup
 
 Use Windows 10/11 x64 with **Python 3.12 x64** from python.org. Include Tcl/Tk in
-the installer. Install **Visual Studio Build Tools 2022** with **Desktop
-development with C++**, including MSVC x64 and the Windows SDK. PyBullet may
-take several minutes to build from source.
+the installer. The physics dependency uses prebuilt MuJoCo wheels; no separate
+MuJoCo installation is needed.
 
 Open PowerShell in the repository:
 
@@ -45,14 +44,13 @@ OpenGL 3.3 support.
 
 ## macOS setup
 
-Use **Python 3.12** with Tcl/Tk and Xcode Command Line Tools
-(`xcode-select --install`). The install command includes a compiler flag for
-PyBullet, which can take a few minutes to build.
+Use **Python 3.12** with Tcl/Tk. MuJoCo provides a prebuilt macOS wheel,
+including support for Apple Silicon.
 
 ```bash
 python3.12 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip setuptools wheel
-CFLAGS="-include stdio.h" .venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m pip install -r requirements.txt
 ```
 
 ## Run

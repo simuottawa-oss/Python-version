@@ -162,8 +162,17 @@ a copy of the scene. Reopen playback after editing physics settings to use
 the new values.
 
 Playback provides **Pause/Play** (`P`), **Step** (1/240 s), **Reset** (`R`),
-**Frame scene** (`F`), gravity, and an optional floor. Bullet uses the
+**Frame scene** (`F`), gravity, and an optional floor. MuJoCo uses the
 instance's transform and motion along with the part's mass and material.
 Legacy OBJ parts default to static. A dynamic legacy mesh uses a convex hull
 for collision and a default mass of 1 kg. See [file formats](file-formats.md)
 for what the scene stores.
+
+Moving sketch and OBJ meshes use convex collision hulls. Static meshes preserve
+concavities using two-sided triangle surfaces with a total thickness of 0.00001 m;
+large static meshes cost more to compile and simulate. Bounce is approximated
+through soft-contact stiffness and damping, so measured bounce depends on
+geometry, timestep, and simultaneous contacts. The two surfaces' bounce and
+friction coefficients are multiplied; the optional floor has neutral coefficients
+of 1. See [physics backend](physics-backend.md) for implementation and validation
+details.

@@ -29,7 +29,6 @@ jobs:
           architecture: x64
           cache: pip
           cache-dependency-path: SimuO Windows/requirements.txt
-      # Hosted Windows images include MSVC; pybullet is built from source.
       - name: Install application and build dependencies
         run: |
           python -m venv .venv
