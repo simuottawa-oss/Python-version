@@ -18,7 +18,9 @@ from simuo.rendering.geometry import create_axis_lines
 from simuo.rendering.picking import PickMesh, object_matrix, pick_object
 from simuo.rendering.ray import Ray
 from simuo.rendering.outline import SelectionOutline
-from simuo.rendering.manipulation import MoveDrag, MoveGizmo, Projection, RotateDrag, RotateGizmo, box_candidates
+from simuo.rendering.manipulation import (
+    MoveDrag, MoveGizmo, Projection, RotateDrag, RotateGizmo, ScaleDrag, ScaleGizmo, box_candidates,
+)
 from simuo.rendering.overlays import InteractionOverlay
 from simuo.physics.viewport.mover import world_corners
 from simuo.rendering.selection_buffer import SelectionBuffer
@@ -221,7 +223,7 @@ class OpenGLViewport(QOpenGLWidget):
         return Projection(self.camera, self.width(), self.height())
 
     def gizmo(self):
-        if self.active_tool not in ("move", "rotate") or len(self.selected_objects) != 1:
+        if self.active_tool not in ("move", "rotate", "scale") or len(self.selected_objects) != 1:
             return None
         obj = self.selected_objects[0]
         if not obj.viewport_visible or obj.viewport_locked:
@@ -231,7 +233,9 @@ class OpenGLViewport(QOpenGLWidget):
             if item['SceneObject'] is obj and mesh is not None and len(mesh.triangles):
                 if self.active_tool == "move":
                     return MoveGizmo(obj, self.projection())
-                return RotateGizmo(obj, self.projection())
+                if self.active_tool == "rotate":
+                    return RotateGizmo(obj, self.projection())
+                return ScaleGizmo(obj, self.projection())
         return None
 
     def box_rect(self):
@@ -1098,9 +1102,12 @@ class OpenGLViewport(QOpenGLWidget):
                 if isinstance(gizmo, MoveGizmo):
                     self.drag = MoveDrag(gizmo, handle, point)
                     label = 'Move Object'
-                else:
+                elif isinstance(gizmo, RotateGizmo):
                     self.drag = RotateDrag(gizmo, handle, point)
                     label = 'Rotate Object'
+                else:
+                    self.drag = ScaleDrag(gizmo, handle, point)
+                    label = 'Scale Object'
                 self.transform_started.emit((gizmo.mover.scene_object.identifier,), label)
                 if self.isVisible():
                     self.grabMouse()

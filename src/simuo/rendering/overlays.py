@@ -6,7 +6,7 @@ from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import QWidget
 
-from simuo.rendering.manipulation import MoveGizmo, RotateDrag, RotateGizmo
+from simuo.rendering.manipulation import MoveGizmo, RotateDrag, RotateGizmo, ScaleGizmo
 
 
 def polygon(points):
@@ -37,6 +37,22 @@ class InteractionOverlay(QWidget):
             label = b+(b-a)/math.hypot(*(b-a))*11
             painter.drawText(QPointF(float(label[0]-4), float(label[1]+4)), handle.key.upper())
 
+    def _draw_scale(self, painter, gizmo, active):
+        for handle in gizmo.handles:
+            color = QColor('#f5db7c' if handle.key == active else handle.color)
+            painter.setPen(QPen(color, 3 if handle.key == active else 2))
+            a, b = handle.points
+            painter.drawLine(QPointF(*a), QPointF(*b))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(color)
+            radius = 6 if handle.key == active else 5
+            painter.drawEllipse(QPointF(*b), radius, radius)
+            painter.setPen(color)
+            dx, dy = b[0]-a[0], b[1]-a[1]
+            spread = math.hypot(dx, dy) or 1
+            label = (b[0]+dx/spread*14, b[1]+dy/spread*14)
+            painter.drawText(QPointF(float(label[0]-4), float(label[1]+4)), handle.key.upper())
+
     def _draw_rotate(self, painter, gizmo, active, drag):
         dragging_key = drag.handle.key if drag is not None else None
         for handle in gizmo.handles:
@@ -58,6 +74,8 @@ class InteractionOverlay(QWidget):
         elif isinstance(gizmo, RotateGizmo):
             drag = self.viewport.drag if isinstance(self.viewport.drag, RotateDrag) else None
             self._draw_rotate(painter, gizmo, active, drag)
+        elif isinstance(gizmo, ScaleGizmo):
+            self._draw_scale(painter, gizmo, active)
         corners = self.viewport.origin_pick_corners()
         if corners:
             projection = self.viewport.projection()

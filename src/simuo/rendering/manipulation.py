@@ -7,7 +7,9 @@ import math
 import glm
 import numpy as np
 
-from simuo.physics.viewport.mover import AXES, Mover, _ring_points, object_center
+from simuo.physics.viewport.mover import (
+    AXES, AXES_BY_NAME, Mover, _ring_points, closest_point_on_line_t, object_center,
+)
 from simuo.rendering.picking import object_matrix, rotation_matrix
 
 AXIS_COLORS = ('#ed6867', '#83c66d', '#6d9ff2')
@@ -111,6 +113,75 @@ class MoveDrag:
         axis = 'xyz'.index(self.handle.key)
         self.feedback = f"Move {self.handle.key.upper()} to {position[axis]:.3g}"
         return {obj.identifier: {'position': position}}
+
+
+class ScaleGizmo:
+    """Screen-sized dots on the same world axes the move gizmo uses."""
+
+    def __init__(self, obj, projection):
+        self.mover = Mover(obj)
+        self.projection = projection
+        self.handles = []
+        origin = self.mover.world_center()
+        center = projection.point(origin)
+        length = projection.world_per_pixel(origin) * 80
+        if center is None or not -1 <= center[2] <= 1 or length <= 0:
+            return
+
+        for (axis, direction, _), color in zip(AXES, AXIS_COLORS):
+            end = projection.point(origin + direction * length)
+            if end is not None and np.linalg.norm(end[:2] - center[:2]) >= 14:
+                self.handles.append(MoveHandle(axis, np.array([center[:2], end[:2]]), color))
+
+    def hit(self, point):
+        point = np.asarray(point)
+        best = None
+        best_distance = 9
+        for handle in self.handles:
+            distance = float(np.linalg.norm(handle.points[1] - point))
+            if distance <= best_distance:
+                best, best_distance = handle, distance
+        return best
+
+
+class ScaleDrag:
+    """Resize the object along a single world axis, as a cancellable preview.
+
+    The dragged dot's distance from the gizmo's anchor maps onto the box's
+    half-size along that axis - at scale 1 the dot already sits on the box's
+    actual surface (same ARROW_GAP-free placement math as the move arrows),
+    so moving the mouse by that many world units changes the scale by
+    roughly one "box half-size" worth, keeping the drag visually attached to
+    the edge being pulled instead of feeling arbitrarily sensitive.
+    """
+
+    MIN_SCALE = 0.01
+
+    def __init__(self, gizmo, handle, start):
+        self.handle = handle
+        self.start = start
+        self.feedback = ''
+        self.projection = gizmo.projection
+        self.obj = obj = gizmo.mover.scene_object
+        self.axis_index = 'xyz'.index(handle.key)
+        self.axis_dir = AXES_BY_NAME[handle.key]
+        self.anchor = gizmo.mover.world_center()
+        self.scale_start = list(obj.scale)
+        self.half_size = float(obj.localMax[self.axis_index] - obj.localMin[self.axis_index]) * 0.5
+        self._t0 = closest_point_on_line_t(self.anchor, self.axis_dir, *self._ray(start))
+
+    def _ray(self, point):
+        origin, direction = self.projection.ray(point)
+        return glm.vec3(*origin), glm.vec3(*direction)
+
+    def updates(self, point):
+        scale = self.scale_start.copy()
+        if self.half_size > 1e-9:
+            t = closest_point_on_line_t(self.anchor, self.axis_dir, *self._ray(point))
+            scale[self.axis_index] = max(self.MIN_SCALE,
+                                         self.scale_start[self.axis_index] + (t - self._t0) / self.half_size)
+        self.feedback = f"Scale {self.handle.key.upper()} to {scale[self.axis_index]:.3g}"
+        return {self.obj.identifier: {'scale': scale}}
 
 
 def decompose_euler_xyz(m, previous_degrees):

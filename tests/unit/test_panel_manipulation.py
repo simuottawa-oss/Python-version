@@ -11,7 +11,8 @@ from tests import ROOT
 from simuo.physics.viewport.mover import Mover, object_center
 from simuo.rendering.camera import Camera
 from simuo.rendering.manipulation import (
-    MoveDrag, MoveGizmo, Projection, RotateDrag, RotateGizmo, box_candidates, decompose_euler_xyz,
+    MoveDrag, MoveGizmo, Projection, RotateDrag, RotateGizmo, ScaleDrag, ScaleGizmo,
+    box_candidates, decompose_euler_xyz,
 )
 from simuo.parts.part_assets import loadObjFlatShaded
 from simuo.rendering.picking import PickMesh, rotation_matrix
@@ -44,6 +45,30 @@ class Manipulation(unittest.TestCase):
         self.assertGreater(update[0], -2)
         self.assertEqual(update[1:], [0, 0])
         self.assertEqual(obj.position, [-2, 0, 0])
+
+    def test_scale_handle_resizes_only_its_own_axis_without_mutating_object(self):
+        obj = self.objects[0]
+        obj.rotation = [0, 0, 0]
+        gizmo = ScaleGizmo(obj, self.projection)
+        handle = next(h for h in gizmo.handles if h.key == 'x')
+        point = handle.points[-1]
+        self.assertIs(gizmo.hit(point), handle)
+        drag = ScaleDrag(gizmo, handle, tuple(point))
+
+        grown = drag.updates(point + [80, 0])[obj.identifier]['scale']
+        self.assertGreater(grown[0], 1.0)
+        self.assertEqual(grown[1:], [1.0, 1.0])
+
+        shrunk = drag.updates(point - [80, 0])[obj.identifier]['scale']
+        self.assertLess(shrunk[0], 1.0)
+        self.assertEqual(shrunk[1:], [1.0, 1.0])
+
+        # A huge inward drag clamps to a small positive scale instead of
+        # going to zero or flipping negative.
+        clamped = drag.updates(point - [10000, 0])[obj.identifier]['scale']
+        self.assertEqual(clamped[0], ScaleDrag.MIN_SCALE)
+
+        self.assertEqual(obj.scale, [1.0, 1.0, 1.0])
 
     def test_behind_camera_has_no_gizmo_or_selection(self):
         for obj in self.objects:

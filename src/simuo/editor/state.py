@@ -402,7 +402,7 @@ class EditorState(QObject):
         return True
 
     def set_tool(self, tool):
-        if tool not in ("select", "move", "rotate"):
+        if tool not in ("select", "move", "rotate", "scale"):
             raise ValueError("Unknown viewport tool")
         if tool != self.active_tool:
             self.cancel_transform()
