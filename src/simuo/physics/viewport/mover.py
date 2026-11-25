@@ -10,6 +10,8 @@ import glm
 import math
 import numpy as np
 
+from simuo.rendering.picking import object_matrix
+
 # Per-axis (name, world direction, base color) used everywhere in this
 # module: placing an arrow, hit-testing it, and coloring it for rendering.
 AXES = [
@@ -38,6 +40,62 @@ HEAD_RADIUS = 0.13
 # hit. Fixed in world units, so picking gets harder the farther the camera
 # is from the gizmo - a known v1 simplification (see plan notes).
 PICK_RADIUS = 0.2
+
+# All 8 combinations of (min, max) per axis, as -1/1 signs picking localMin
+# or localMax respectively. Shared by Mover.world_center() (origin override)
+# and by the origin-picker UI (which corner the user clicked).
+CORNER_SIGNS = [(sx, sy, sz) for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)]
+
+
+def object_center(scene_object):
+    """The object's bounding-box center in world space, following its rotation.
+
+    Unlike Mover.world_center(), this always ignores any user-chosen move
+    gizmo origin (SceneObject.origin_corner) — used by things that must pivot
+    on the object's actual geometric center regardless of where the move
+    gizmo happens to be anchored, such as the rotate gizmo.
+
+    Args:
+        scene_object: SceneObject whose cached mesh bounds to use.
+
+    Returns:
+        glm.vec3: World-space center, or the raw position if the mesh's
+        bounds aren't loaded yet.
+    """
+    if scene_object.localMin is None:
+        return glm.vec3(*scene_object.position)
+    local_center = (glm.vec3(*scene_object.localMin) + glm.vec3(*scene_object.localMax)) * 0.5
+    return glm.vec3(object_matrix(scene_object) * glm.vec4(*local_center, 1.0))
+
+
+def world_corners(scene_object):
+    """The 8 bounding-box corners of a scene object, in world space right now.
+
+    Recomputed from the object's live position/rotation/scale every call (via
+    the same object_matrix() used for rendering and picking), so the corners
+    stay on the mesh's actual corners as the object rotates.
+
+    Args:
+        scene_object: SceneObject whose cached mesh bounds to use.
+
+    Returns:
+        list[tuple[tuple[int, int, int], glm.vec3]]: (signs, world_point)
+        pairs, one per corner. Empty if the object has no mesh bounds yet.
+    """
+    if scene_object.localMin is None:
+        return []
+
+    local_min = glm.vec3(*scene_object.localMin)
+    local_max = glm.vec3(*scene_object.localMax)
+    model = object_matrix(scene_object)
+
+    corners = []
+    for signs in CORNER_SIGNS:
+        local_point = glm.vec3(*(
+            local_min[i] if signs[i] < 0 else local_max[i] for i in range(3)
+        ))
+        corners.append((signs, glm.vec3(model * glm.vec4(*local_point, 1.0))))
+    return corners
 
 
 def _perpendicular_basis(direction):
@@ -219,12 +277,16 @@ def closest_point_on_line_t(line_point, line_dir, ray_origin, ray_dir):
 class Mover:
     """Tracks the move gizmo (3 colored arrows) for one selected SceneObject.
 
-    The gizmo is always axis-aligned to world space, not the object's own
-    rotation. Its position and size are derived live from the object's
-    current position/scale and its mesh's cached bounding box, so it stays
-    attached to the object as it moves instead of a fixed snapshot. Mover
-    also owns hit-testing the mouse against its own arrows, and the drag
-    state used to translate the object along a single axis.
+    The arrows themselves always point along world axes, not the object's
+    own rotation, so dragging one is always a world-axis move. Where the
+    gizmo is anchored, though, does follow the object's current rotation
+    (via world_center()), so a corner picked in the origin-picker still
+    lines up with the gizmo once the object has been rotated. Position and
+    size are derived live from the object's current position/rotation/scale
+    and its mesh's cached bounding box, so the gizmo stays attached to the
+    object instead of a fixed snapshot. Mover also owns hit-testing the
+    mouse against its own arrows, and the drag state used to translate the
+    object along a single axis.
     """
 
     def __init__(self, scene_object):
@@ -238,7 +300,14 @@ class Mover:
         self.dragging_axis = None
 
     def world_center(self):
-        """Where the object's bounding-box middle sits in world space right now."""
+        """Where the gizmo is anchored in world space right now.
+
+        Normally the object's bounding-box middle, but a user-chosen corner
+        (SceneObject.origin_corner) overrides that if set. Either way, the
+        anchor point is transformed through the object's current rotation
+        (and scale), so it stays on the actual corner/center of the rotated
+        mesh rather than a stale, unrotated position.
+        """
         obj = self.scene_object
 
         if obj.localMin is None:
@@ -246,8 +315,14 @@ class Mover:
             # object's raw position so the gizmo doesn't crash.
             return glm.vec3(*obj.position)
 
-        local_center = (glm.vec3(*obj.localMin) + glm.vec3(*obj.localMax)) * 0.5
-        return glm.vec3(*obj.position) + local_center * glm.vec3(*obj.scale)
+        if obj.origin_corner is None:
+            return object_center(obj)
+
+        signs = obj.origin_corner
+        local_point = glm.vec3(*(
+            obj.localMin[i] if signs[i] < 0 else obj.localMax[i] for i in range(3)
+        ))
+        return glm.vec3(object_matrix(obj) * glm.vec4(*local_point, 1.0))
 
     def half_extent(self):
         """How far the object's box reaches from its center, per world axis, right now."""

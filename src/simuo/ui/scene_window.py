@@ -97,6 +97,9 @@ class SimuOMainWindow(QMainWindow):
         self.viewport.frame_scene_requested.connect(self.editor_state.frame_scene)
         self.viewport.escape_requested.connect(self.onViewportEscape)
         self.editor_state.frame_requested.connect(self.viewport.frameObject)
+        self.editor_state.origin_pick_changed.connect(self.viewport.set_origin_pick)
+        self.viewport.origin_picked.connect(self.editor_state.set_mover_origin)
+        self.viewport.origin_pick_cancelled.connect(self.editor_state.cancel_pick_origin)
 
         self.panel_manager = PanelManager(self, self.viewMenu)
         for spec in editor_panel_specs(self.editor_state):

@@ -6,6 +6,7 @@ import time
 import ctypes
 
 import glm
+import numpy as np
 from OpenGL.GL import *
 from OpenGL.GL.shaders import compileProgram, compileShader
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
@@ -17,8 +18,11 @@ from simuo.rendering.geometry import create_axis_lines
 from simuo.rendering.picking import PickMesh, object_matrix, pick_object
 from simuo.rendering.ray import Ray
 from simuo.rendering.outline import SelectionOutline
-from simuo.rendering.manipulation import MoveDrag, MoveGizmo, Projection, box_candidates
+from simuo.rendering.manipulation import (
+    MoveDrag, MoveGizmo, Projection, RotateDrag, RotateGizmo, ScaleDrag, ScaleGizmo, box_candidates,
+)
 from simuo.rendering.overlays import InteractionOverlay
+from simuo.physics.viewport.mover import world_corners
 from simuo.rendering.selection_buffer import SelectionBuffer
 from simuo.rendering.shaders import (
     AXIS_VERTEX_SHADER, AXIS_FRAGMENT_SHADER,
@@ -56,6 +60,8 @@ class OpenGLViewport(QOpenGLWidget):
     transform_previewed = Signal(object)
     transform_finished = Signal(bool)
     tools_visibility_requested = Signal()
+    origin_picked = Signal(str, object)
+    origin_pick_cancelled = Signal()
 
     CAMERA_KEYS = frozenset((Qt.Key_W, Qt.Key_A, Qt.Key_S, Qt.Key_D, Qt.Key_Space, Qt.Key_C, Qt.Key_Left, Qt.Key_Right))
     SHORTCUT_KEYS = frozenset((Qt.Key_Control, Qt.Key_Meta, Qt.Key_Alt, Qt.Key_AltGr))
@@ -93,6 +99,8 @@ class OpenGLViewport(QOpenGLWidget):
         self._selection_modifiers = Qt.NoModifier
         self.selection_buffer = None
         self.pick_modifiers = Qt.KeyboardModifier.NoModifier
+        self._origin_pick_id = None
+        self.hovered_corner = None
 
         self.setFocusPolicy(
             Qt.StrongFocus
@@ -174,11 +182,48 @@ class OpenGLViewport(QOpenGLWidget):
         self.tool_options = dict(options)
         self.interaction_overlay.update()
 
+    def set_origin_pick(self, identifier):
+        self.cancel_interaction()
+        self._origin_pick_id = identifier
+        self.hovered_corner = None
+        self.interaction_overlay.update()
+
+    def origin_pick_corners(self):
+        """(signs, world_point) pairs for the object currently being origin-picked.
+
+        Returns:
+            list or None: None when no pick is in progress or the target
+            object has no mesh bounds yet.
+        """
+        if self._origin_pick_id is None:
+            return None
+        obj = next((item for item in self.selected_objects if item.identifier == self._origin_pick_id), None)
+        if obj is None:
+            return None
+        corners = world_corners(obj)
+        return corners or None
+
+    def _hit_test_corners(self, point):
+        projection = self.projection()
+        corners = self.origin_pick_corners()
+        if not corners:
+            return None
+        point = np.asarray(point)
+        best, best_distance = None, 10
+        for signs, world_point in corners:
+            screen = projection.point(world_point)
+            if screen is None or not -1 <= screen[2] <= 1:
+                continue
+            distance = np.linalg.norm(screen[:2] - point)
+            if distance <= best_distance:
+                best, best_distance = signs, distance
+        return best
+
     def projection(self):
         return Projection(self.camera, self.width(), self.height())
 
     def gizmo(self):
-        if self.active_tool != "move" or len(self.selected_objects) != 1:
+        if self.active_tool not in ("move", "rotate", "scale") or len(self.selected_objects) != 1:
             return None
         obj = self.selected_objects[0]
         if not obj.viewport_visible or obj.viewport_locked:
@@ -186,7 +231,11 @@ class OpenGLViewport(QOpenGLWidget):
         for item in self.renderObjects:
             mesh = item.get('pick_mesh')
             if item['SceneObject'] is obj and mesh is not None and len(mesh.triangles):
-                return MoveGizmo(obj, self.projection())
+                if self.active_tool == "move":
+                    return MoveGizmo(obj, self.projection())
+                if self.active_tool == "rotate":
+                    return RotateGizmo(obj, self.projection())
+                return ScaleGizmo(obj, self.projection())
         return None
 
     def box_rect(self):
@@ -973,6 +1022,14 @@ class OpenGLViewport(QOpenGLWidget):
             event.accept()
             return
         if event.key() == Qt.Key_Escape:
+            if self._origin_pick_id is not None:
+                self._origin_pick_id = None
+                self.hovered_corner = None
+                self.unsetCursor()
+                self.interaction_overlay.update()
+                self.origin_pick_cancelled.emit()
+                event.accept()
+                return
             if self.drag is not None or self._box_start is not None:
                 self.cancel_interaction()
                 event.accept()
@@ -1025,12 +1082,33 @@ class OpenGLViewport(QOpenGLWidget):
             self.setFocus()
             self.keys.clear()
             point = (event.position().x(), event.position().y())
+            if self._origin_pick_id is not None:
+                signs = self._hit_test_corners(point)
+                identifier = self._origin_pick_id
+                self._origin_pick_id = None
+                self.hovered_corner = None
+                self.unsetCursor()
+                self.interaction_overlay.update()
+                if signs is not None:
+                    self.origin_picked.emit(identifier, signs)
+                else:
+                    self.origin_pick_cancelled.emit()
+                event.accept()
+                return
             gizmo = self.gizmo()
             handle = gizmo.hit(point) if gizmo is not None else None
             modifiers = event.modifiers() & (Qt.ControlModifier | Qt.MetaModifier | Qt.ShiftModifier | Qt.AltModifier)
             if handle is not None and not modifiers:
-                self.drag = MoveDrag(gizmo, handle, point)
-                self.transform_started.emit((gizmo.mover.scene_object.identifier,), 'Move Object')
+                if isinstance(gizmo, MoveGizmo):
+                    self.drag = MoveDrag(gizmo, handle, point)
+                    label = 'Move Object'
+                elif isinstance(gizmo, RotateGizmo):
+                    self.drag = RotateDrag(gizmo, handle, point)
+                    label = 'Rotate Object'
+                else:
+                    self.drag = ScaleDrag(gizmo, handle, point)
+                    label = 'Scale Object'
+                self.transform_started.emit((gizmo.mover.scene_object.identifier,), label)
                 if self.isVisible():
                     self.grabMouse()
                 self.interaction_overlay.update()
@@ -1133,6 +1211,12 @@ class OpenGLViewport(QOpenGLWidget):
             event: Qt mouse move event.
         """
         point = (event.position().x(), event.position().y())
+        if self._origin_pick_id is not None:
+            self.hovered_corner = self._hit_test_corners(point)
+            self.setCursor(Qt.PointingHandCursor if self.hovered_corner is not None else Qt.ArrowCursor)
+            self.interaction_overlay.update()
+            event.accept()
+            return
         if self.drag is not None:
             self.transform_previewed.emit(self.drag.updates(point))
             self.interaction_overlay.update()

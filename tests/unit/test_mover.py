@@ -1,16 +1,11 @@
 """Movement-tool integration with loaded parts, scene saving, and deletion."""
-from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock
 
-import glm
 import numpy as np
-from PySide6.QtCore import QPointF
 
 from tests import ROOT
-from simuo.physics.viewport.mover import Mover
-from simuo.physics.viewport.renderer import Camera, OpenGLViewport
-from simuo.project.scene import Scene, SceneObject
+from simuo.physics.viewport.mover import Mover, world_corners
+from simuo.project.scene import SceneObject
 
 
 class MoverTests(unittest.TestCase):
@@ -34,27 +29,21 @@ class MoverTests(unittest.TestCase):
         self.assertEqual(len(segments), 3)
         self.assertEqual(sum(s[3] for s in segments), data.size // 3)
 
-    def test_drag_marks_scene_dirty_and_deletion_clears_selection(self):
+    def test_world_corners_and_gizmo_anchor_follow_rotation(self):
         obj = self.object()
-        scene = Scene()
-        scene.addObject(obj)
-        camera = Camera()
-        camera.position = glm.vec3(0, 0, 5)
+        obj.position = [1, 2, 3]
+        obj.rotation = [0, 0, 90]
+        # Rz(90) maps the local max corner (.1,.1,.1) to (-.1,.1,.1), so it
+        # should land at (0.9, 2.1, 3.1) in world space, not the unrotated
+        # (1.1, 2.1, 3.1) a stale, rotation-ignoring bounding box would give.
+        corners = {signs: tuple(point) for signs, point in world_corners(obj)}
+        np.testing.assert_allclose(corners[(1, 1, 1)], [0.9, 2.1, 3.1], atol=1e-6)
+
         mover = Mover(obj)
-        mover.begin_drag("x", camera.position, camera.front)
-        viewport = SimpleNamespace(
-            mover=mover, selectedObject=obj, scene=scene, camera=camera,
-            width=lambda: 800, height=lambda: 600, update=Mock(), renderObjects=[],
-        )
-        event = SimpleNamespace(position=lambda: QPointF(450, 300))
-        OpenGLViewport.mouseMoveEvent(viewport, event)
-        self.assertGreater(obj.position[0], 0)
-        np.testing.assert_allclose(obj.position[1:], [0, 0])
-        self.assertTrue(scene.dirty)
-        viewport.update.assert_called()
-        OpenGLViewport.removeObject(viewport, obj)
-        self.assertIsNone(viewport.selectedObject)
-        self.assertIsNone(viewport.mover)
+        obj.origin_corner = (1, 1, 1)
+        np.testing.assert_allclose(mover.world_center(), [0.9, 2.1, 3.1], atol=1e-6)
+        obj.origin_corner = None
+        np.testing.assert_allclose(mover.world_center(), [1, 2, 3], atol=1e-6)
 
 
 if __name__ == "__main__":

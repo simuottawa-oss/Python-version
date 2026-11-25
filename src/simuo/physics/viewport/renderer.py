@@ -19,36 +19,8 @@ from PySide6.QtCore import Qt, QTimer, QPoint
 from PySide6.QtGui import QCursor
 
 from simuo.physics.viewport.ray import Ray
-from simuo.physics.viewport.mover import Mover
 from simuo.parts.part_assets import loadObjFlatShaded  # Compatibility export for existing callers
 
-
-GIZMO_VERTEX_SHADER = """
-#version 330 core
-
-layout (location = 0) in vec3 in_position;
-
-uniform mat4 view;
-uniform mat4 projection;
-
-void main()
-{
-    gl_Position = projection * view * vec4(in_position, 1.0);
-}
-"""
-
-GIZMO_FRAGMENT_SHADER = """
-#version 330 core
-
-uniform vec3 color;
-
-out vec4 frag_color;
-
-void main()
-{
-    frag_color = vec4(color, 1.0);
-}
-"""
 
 DEBUG_RAY_VERTEX_SHADER = """
 #version 330 core
@@ -429,11 +401,7 @@ class OpenGLViewport(QOpenGLWidget):
         Returns:
             None.
         """
-        self.mover = None
         self.selectedObject = None
-        self.gizmoShader = None
-        self.gizmo_vao = None
-        self.gizmo_vbo = None
         self.axisShader = None
         self.debugRayShader = None
         self.debug_ray = None
@@ -501,7 +469,6 @@ class OpenGLViewport(QOpenGLWidget):
         Returns:
             None. Leaves the CPU scene and axis resources intact.
         """
-        self.mover = None
         self.selectedObject = None
         self.makeCurrent()
 
@@ -541,7 +508,6 @@ class OpenGLViewport(QOpenGLWidget):
             None. Leaves the CPU scene list unchanged and schedules a repaint.
         """
         if self.selectedObject is sceneObject:
-            self.mover = None
             self.selectedObject = None
         removed = [obj for obj in self.renderObjects if obj["SceneObject"] is sceneObject]
         if removed:
@@ -776,15 +742,6 @@ class OpenGLViewport(QOpenGLWidget):
             self.debug_ray_vao = glGenVertexArrays(1)
             self.debug_ray_vbo = glGenBuffers(1)
 
-        self.gizmoShader = compileProgram(
-            compileShader(GIZMO_VERTEX_SHADER, GL_VERTEX_SHADER),
-            compileShader(GIZMO_FRAGMENT_SHADER, GL_FRAGMENT_SHADER),
-            validate=validate_program,
-        )
-        if self.gizmo_vao is None:
-            self.gizmo_vao = glGenVertexArrays(1)
-            self.gizmo_vbo = glGenBuffers(1)
-        
 
     def resizeGL(
         self,
@@ -1112,32 +1069,6 @@ class OpenGLViewport(QOpenGLWidget):
             glBindVertexArray(0)
             glUseProgram(0)
 
-        if self.mover is not None:
-            vertex_data, segments = self.mover.build_render_data()
-            glDisable(GL_DEPTH_TEST)
-            glUseProgram(self.gizmoShader)
-            gizmoViewLocation = glGetUniformLocation(self.gizmoShader, 'view')
-            gizmoProjectionLocation = glGetUniformLocation(self.gizmoShader, 'projection')
-            gizmoColorLocation = glGetUniformLocation(self.gizmoShader, 'color')
-            glUniformMatrix4fv(gizmoViewLocation, 1, GL_FALSE, glm.value_ptr(view))
-            glUniformMatrix4fv(gizmoProjectionLocation, 1, GL_FALSE, glm.value_ptr(projection))
-            glBindVertexArray(self.gizmo_vao)
-            glBindBuffer(GL_ARRAY_BUFFER, self.gizmo_vbo)
-            glBufferData(GL_ARRAY_BUFFER, vertex_data.nbytes, vertex_data, GL_DYNAMIC_DRAW)
-            glEnableVertexAttribArray(0)
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * vertex_data.itemsize, ctypes.c_void_p(0))
-            for name, color, start_vertex, vertex_count in segments:
-                r, g, b = color
-                if name == self.mover.hovered_axis:
-                    r, g, b = (min(r + 0.3, 1.0), min(g + 0.3, 1.0), min(b + 0.3, 1.0))
-                glUniform3f(gizmoColorLocation, r, g, b)
-                glDrawArrays(GL_TRIANGLES, start_vertex, vertex_count)
-            glBindVertexArray(0)
-            glUseProgram(0)
-            glEnable(GL_DEPTH_TEST)
-
-
-
 
     # ---------------------------------------------------------
     # CAMERA INPUT
@@ -1257,8 +1188,6 @@ class OpenGLViewport(QOpenGLWidget):
             None. Delegates the focus event after resetting input state.
         """
         self.keys.clear()
-        if self.mover is not None and self.mover.dragging_axis is not None:
-            self.mover.end_drag()
         if self.right_mouse_down:
             self.right_mouse_down = False
             self.ignore_center_event = False
@@ -1281,16 +1210,10 @@ class OpenGLViewport(QOpenGLWidget):
             origin, direction = self.camera.mouse_ray(
                 event, width, height, projection, self.camera.view_matrix()
             )
-            if self.mover is not None:
-                axis = self.mover.hit_test(origin, direction)
-                if axis is not None:
-                    self.mover.begin_drag(axis, origin, direction)
-                    return
             ray = self.RenderRay(origin, direction, 100.0)
             objects = self.scene.objects if self.scene is not None else []
             hit = ray.checkCollisions(obj for obj in objects if obj.name != "Axis")
             self.selectedObject = hit["object"] if hit is not None else None
-            self.mover = Mover(self.selectedObject) if self.selectedObject is not None else None
             self.update()
         elif event.button() == Qt.RightButton:
             self.right_mouse_down = True
@@ -1317,10 +1240,6 @@ class OpenGLViewport(QOpenGLWidget):
             self.releaseMouse()
             self.unsetCursor()
 
-        if event.button() == Qt.LeftButton and self.mover is not None:
-            if self.mover.dragging_axis is not None:
-                self.mover.end_drag()
-            
     def mouseMoveEvent(self, event):
         """Drag the selected part, update arrow hover, or rotate captured mouse look.
 
@@ -1331,22 +1250,6 @@ class OpenGLViewport(QOpenGLWidget):
         Returns:
             None. Updates a selected part and dirty state, or the camera and pointer.
         """
-        if self.mover is not None:
-            width, height = max(1, self.width()), max(1, self.height())
-            projection = glm.perspective(glm.radians(60.0), width / height, 0.1, 1000.0)
-            origin, direction = self.camera.mouse_ray(
-                event, width, height, projection, self.camera.view_matrix()
-            )
-            if self.mover.dragging_axis is not None:
-                before = list(self.mover.scene_object.position)
-                self.mover.update_drag(origin, direction)
-                if self.scene is not None and self.mover.scene_object.position != before:
-                    self.scene.dirty = True
-                self.update()
-                return
-            self.mover.hovered_axis = self.mover.hit_test(origin, direction)
-            self.update()
-
         if not self.right_mouse_down:
             return
 
