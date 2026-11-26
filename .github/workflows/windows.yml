@@ -51,15 +51,15 @@ jobs:
           } finally { Pop-Location }
       - name: Build native Windows executable
         run: .venv\Scripts\python.exe -m PyInstaller --noconfirm src/main.spec
-      - name: Packaged executable startup
+      - name: Packaged executable physics check
         run: |
           $exe = Join-Path $PWD 'dist\SimuO.exe'
-          $process = Start-Process -FilePath $exe -ArgumentList '--help' -WorkingDirectory $env:RUNNER_TEMP -PassThru
+          $process = Start-Process -FilePath $exe -ArgumentList '--check-physics' -WorkingDirectory $env:RUNNER_TEMP -PassThru
           if (-not $process.WaitForExit(60000)) {
             $process.Kill()
-            throw 'Packaged startup timed out'
+            throw 'Packaged physics check timed out'
           }
-          if ($process.ExitCode -ne 0) { throw "Packaged startup failed: $($process.ExitCode)" }
+          if ($process.ExitCode -ne 0) { throw "Packaged physics check failed: $($process.ExitCode)" }
       - uses: actions/upload-artifact@v4
         with:
           name: SimuO-Windows-x64

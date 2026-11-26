@@ -85,7 +85,7 @@ class PhysicsWorld:
     """
     dt = 1/240
     substeps = 8
-    surface_thickness = 1e-5  # metres, total thickness of a static mesh surface
+    surface_thickness = 1e-5  # metres, total thickness of a collision surface
 
     def __init__(self, source_scene, gravity=-9.81, floor=True):
         # Keep editing/importing available without loading the solver library.
@@ -195,7 +195,21 @@ class PhysicsWorld:
     def _mesh_geoms(self, assets, body, index, vertices, static, mass):
         """Use moving convex hulls, or two-sided triangle prisms for static meshes."""
         if not static:
-            chunks = [vertices]
+            points = np.unique(vertices, axis=0)
+            if len(points) < 3:
+                raise ValueError("Moving collision mesh has no nondegenerate surface")
+            center = points.mean(axis=0)
+            points = points - center
+            _, spans, axes = np.linalg.svd(points, full_matrices=False)
+            tolerance = spans[0] * 4 * np.finfo(np.float32).eps
+            if spans[1] <= tolerance:
+                raise ValueError("Moving collision mesh has no nondegenerate surface")
+            if spans[2] <= tolerance:
+                # MuJoCo needs a solid hull. Give planar surfaces thickness along
+                # their normal in the collision model only.
+                offset = axes[-1] * self.surface_thickness/2
+                points = np.concatenate([points-offset, points+offset])
+            chunks = [(center, points)]
         else:
             chunks = []
             for triangle in vertices.reshape(-1, 3, 3):
@@ -204,14 +218,19 @@ class PhysicsWorld:
                 if length <= 1e-15:
                     continue
                 offset = normal/length * self.surface_thickness/2
-                chunks.append(np.concatenate([triangle-offset, triangle+offset]))
+                center = triangle.mean(axis=0)
+                points = triangle - center
+                chunks.append((center, np.concatenate([points-offset, points+offset])))
         if not chunks:
             raise ValueError("Collision mesh has no nondegenerate triangles")
         geoms = []
-        for number, points in enumerate(chunks):
+        for number, (center, points) in enumerate(chunks):
             name = f"mesh_{index}_{number}"
-            SubElement(assets, "mesh", name=name, vertex=_numbers(np.unique(points, axis=0)))
-            geoms.append(SubElement(body, "geom", type="mesh", mesh=name, mass=str(mass)))
+            # Keep thin hulls near zero before MuJoCo converts their vertices to
+            # float32. Otherwise a large local OBJ offset can erase their thickness.
+            SubElement(assets, "mesh", name=name, vertex=_numbers(points))
+            geoms.append(SubElement(body, "geom", type="mesh", mesh=name,
+                                    pos=_numbers(center), mass=str(mass)))
         return geoms
 
     @property

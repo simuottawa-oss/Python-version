@@ -83,3 +83,17 @@ class PhysicsPlaybackTests(unittest.TestCase):
             window.tick()
         self.assertFalse(window.running)
         self.assertEqual(window.info.text(), "Simulation stopped: invalid state")
+        self.assertTrue(window.stats.text().startswith("PAUSED"))
+
+    def test_manual_step_reports_solver_error_and_reset_clears_it(self):
+        from mujoco import FatalError
+
+        _, window = self.window()
+        with patch.object(window.world, "step", side_effect=FatalError("invalid state")):
+            window.single_step()
+        self.assertFalse(window.running)
+        self.assertEqual(window.info.text(), "Simulation stopped: invalid state")
+        window.reset_button.click()
+        self.assertNotIn("invalid state", window.info.text())
+        window.step_button.click()
+        self.assertEqual(window.world.steps, 1)

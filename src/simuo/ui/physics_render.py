@@ -16,6 +16,9 @@ from simuo.project.scene import Scene, SceneObject
 from simuo.project.transforms import rotation_matrix
 
 
+PLAYBACK_HINT = "Live rigid-body physics · scene copy · drag with right mouse / WASD to move the camera"
+
+
 class PhysicsRenderWindow(QMainWindow):
     def __init__(self, source_scene, parent=None):
         """Create a nonmodal playback window, independent physics snapshot, render
@@ -69,7 +72,7 @@ class PhysicsRenderWindow(QMainWindow):
         controls.addWidget(self.floor)
         controls.addStretch()
         layout.addLayout(controls)
-        self.info = QLabel("Live rigid-body physics · scene copy · drag with right mouse / WASD to move the camera")
+        self.info = QLabel(PLAYBACK_HINT)
         self.info.setWordWrap(True)
         layout.addWidget(self.info)
         self.viewport = OpenGLViewport(self,scene=self.render_scene)
@@ -164,6 +167,7 @@ class PhysicsRenderWindow(QMainWindow):
         """
         self.set_running(False)
         self.world.reset()
+        self.info.setText(PLAYBACK_HINT)
         self.viewport.update()
         self._update_status()
 
@@ -174,9 +178,20 @@ class PhysicsRenderWindow(QMainWindow):
             None. Repaints the updated state and status.
         """
         self.set_running(False)
-        self.world.step()
-        self.viewport.update()
-        self._update_status()
+        if self._advance(1):
+            self.viewport.update()
+            self._update_status()
+
+    def _advance(self, steps):
+        """Advance the solver and keep playback paused if it reports an error."""
+        try:
+            self.world.step(steps)
+        except Exception as error:
+            self.set_running(False)
+            self.info.setText(f"Simulation stopped: {error}")
+            self._update_status()
+            return False
+        return True
 
     def change_floor(self, enabled):
         """Enable or disable floor contact, reset playback, and rebuild the visible object
@@ -213,11 +228,7 @@ class PhysicsRenderWindow(QMainWindow):
             self.accumulator += elapsed
             steps = int(self.accumulator/self.world.dt)
             if steps:
-                try:
-                    self.world.step(steps)
-                except Exception as error:
-                    self.set_running(False)
-                    self.info.setText(f"Simulation stopped: {error}")
+                if not self._advance(steps):
                     return
                 self.accumulator -= steps*self.world.dt
         self.viewport.update()

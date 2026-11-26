@@ -70,7 +70,7 @@ Run desktop checks with a working graphics driver from the repository root:
 
 The headless CI jobs cover Windows and macOS. The Windows workflow also checks
 launching from a different working directory, builds the executable, and runs
-its `--help` command. Use the desktop checks to exercise interactive OpenGL.
+its headless physics check. Use the desktop checks to exercise interactive OpenGL.
 
 ## Build an executable
 

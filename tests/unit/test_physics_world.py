@@ -1,6 +1,8 @@
 """Rigid-body integration checks without a display or GPU."""
 from dataclasses import replace
 import math
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
 
 import numpy as np
@@ -37,6 +39,38 @@ class PhysicsTests(unittest.TestCase):
         self.assertLess(abs(world.scene.objects[0].position[1]-(2-.5*9.81*.2**2)),.005)
         self.assertEqual(source.position,[0,2,0])
         self.assertEqual(source.velocity,[0,0,0])
+
+    def test_flat_obj_simulates_as_a_dynamic_or_kinematic_body(self):
+        with TemporaryDirectory() as folder:
+            path = Path(folder) / "plate.obj"
+            # Use a triangle on an oblique plane to exercise hull fitting with
+            # just three unique vertices and no axis-aligned normal.
+            path.write_text("v 0 0 0\nv 1 0 1\nv 0 1 1\nf 1 2 3\n", encoding="utf-8")
+            for body_type in ("dynamic", "kinematic"):
+                with self.subTest(body_type=body_type):
+                    source = SceneObject(meshPath=path)
+                    source.body_type = body_type
+                    source.velocity = [1, 0, 0]
+                    source.scale = [1, 2, .5]
+                    original_vertices = source.asset.vertices.copy()
+                    world = self.world(source, gravity=0, floor=False)
+                    world.step(48)
+                    np.testing.assert_allclose(world.scene.objects[0].position, [.2, 0, 0])
+                    np.testing.assert_array_equal(source.asset.vertices, original_vertices)
+
+    def test_flat_obj_with_large_local_offset_keeps_its_collision_position(self):
+        with TemporaryDirectory() as folder:
+            path = Path(folder) / "offset-plate.obj"
+            path.write_text("v 0 0 10000\nv 1 0 10000\nv 0 1 10000\nf 1 2 3\n",
+                            encoding="utf-8")
+            for body_type in ("static", "dynamic", "kinematic"):
+                with self.subTest(body_type=body_type):
+                    source = SceneObject(meshPath=path)
+                    source.body_type = body_type
+                    source.position = [0, 0, -10000]
+                    world = self.world(source, gravity=0, floor=False)
+                    world.step()
+                    np.testing.assert_allclose(world.data.geom_xpos[0], [1/3, 1/3, 0], atol=1e-6)
 
     def test_rotations_use_editor_convention(self):
         source = self.part(rotation=[20,35,65],angularVelocity=[0,1,0])
