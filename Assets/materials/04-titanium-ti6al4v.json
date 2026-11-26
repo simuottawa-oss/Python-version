@@ -1,0 +1,16 @@
+{
+  "format": "simuo.material",
+  "version": 1,
+  "material": {
+    "name": "Ti-6Al-4V titanium",
+    "young_modulus": 114000000000.0,
+    "poisson_ratio": 0.31,
+    "density": 4420.0,
+    "preset_id": "titanium-ti6al4v",
+    "yield_strength": null,
+    "ultimate_tensile_strength": null
+  },
+  "source_url": "https://www.timet.com/assets/local/documents/datasheets/alphaandbetaalloys/6-4.pdf",
+  "strength_source_url": null,
+  "strength_notes": null
+}

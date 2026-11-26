@@ -1,6 +1,5 @@
 """Qt OpenGL viewport, GPU resources, rendering, and camera input."""
 
-import math
 import sys
 import time
 import ctypes
@@ -13,6 +12,7 @@ from PySide6.QtCore import Qt, QTimer, QPoint, Signal, Slot
 from PySide6.QtGui import QCursor
 
 from simuo.rendering.camera import Camera
+from simuo.rendering.camera_controller import CameraController
 from simuo.rendering.geometry import create_axis_lines
 from simuo.rendering.picking import PickMesh, object_matrix, pick_object
 from simuo.rendering.ray import Ray
@@ -38,7 +38,7 @@ class OpenGLViewport(QOpenGLWidget):
     Keyboard movement is relative to the current camera orientation:
     - W/S move along the camera's forward vector
     - A/D strafe left/right along the camera's right vector
-    - Space/C move vertically along the world's up vector
+    - Space/Alt move vertically along the world's up vector
 
     Mouse interaction is used for looking around the scene. While the right mouse
     button is held, the cursor is recentered inside the widget so the user can
@@ -57,9 +57,9 @@ class OpenGLViewport(QOpenGLWidget):
     transform_finished = Signal(bool)
     tools_visibility_requested = Signal()
 
-    CAMERA_KEYS = frozenset((Qt.Key_W, Qt.Key_A, Qt.Key_S, Qt.Key_D, Qt.Key_Space, Qt.Key_C, Qt.Key_Left, Qt.Key_Right))
-    SHORTCUT_KEYS = frozenset((Qt.Key_Control, Qt.Key_Meta, Qt.Key_Alt, Qt.Key_AltGr))
-    SHORTCUT_MODIFIERS = Qt.ControlModifier | Qt.MetaModifier | Qt.AltModifier | Qt.GroupSwitchModifier
+    CAMERA_KEYS = CameraController.CAMERA_KEYS
+    SHORTCUT_KEYS = CameraController.SHORTCUT_KEYS
+    SHORTCUT_MODIFIERS = CameraController.SHORTCUT_MODIFIERS
 
     def __init__(
         self,
@@ -106,7 +106,8 @@ class OpenGLViewport(QOpenGLWidget):
         self.camera = Camera()
 
         # Keyboard input state.
-        self.keys = set()
+        self.camera_controller = CameraController(self)
+        self.keys = self.camera_controller.keys
 
         # Mouse drag state.
         self.right_mouse_down = False
@@ -276,24 +277,8 @@ class OpenGLViewport(QOpenGLWidget):
                 (float(mesh.minimum[1]), float(mesh.maximum[1])),
                 (float(mesh.minimum[2]), float(mesh.maximum[2])),
             ))
-        if not corners:
+        if not self.camera.frame_points(corners, max(1, self.width())/max(1, self.height())):
             return False
-        center = glm.vec3(*[(min(point[axis] for point in corners) + max(point[axis] for point in corners)) / 2
-                           for axis in range(3)])
-        vertical = math.tan(math.radians(self.camera.field_of_view / 2))
-        horizontal = vertical * max(1, self.width()) / max(1, self.height())
-        distance = self.camera.near_plane
-        depths = []
-        for corner in corners:
-            delta = corner - center
-            depth = glm.dot(delta, self.camera.front)
-            depths.append(depth)
-            distance = max(distance,
-                           abs(glm.dot(delta, self.camera.right)) * 1.15 / horizontal - depth,
-                           abs(glm.dot(delta, self.camera.up)) * 1.15 / vertical - depth,
-                           self.camera.near_plane * 2 - depth)
-        self.camera.position = center - self.camera.front * distance
-        self.camera.far_plane = max(1000.0, (distance + max(depths)) * 1.2)
         self.keys.clear()
         self.update()
         return True
@@ -869,71 +854,8 @@ class OpenGLViewport(QOpenGLWidget):
     # CAMERA INPUT
     # ---------------------------------------------------------
 
-    def update_camera(
-        self,
-        delta_time
-    ):
-        """Apply keyboard-driven camera movement relative to the current view.
-
-        "Camera interaction" in this class is a free-fly camera: the user moves the
-        camera itself through the 3D scene instead of orbiting around a target. The
-        camera's current forward/right/up vectors define the local axes, so motion is
-        always relative to the direction the viewer is facing.
-
-        Args:
-            delta_time: Time elapsed since the previous frame.
-        """
-        if self.drag is not None or self._box_start is not None:
-            return
-        turn = int(Qt.Key_Right in self.keys) - int(Qt.Key_Left in self.keys)
-        if turn:
-            self.camera.yaw += turn * 90.0 * delta_time
-            self.camera.update_vectors()
-        speed = (
-            10.0
-            * delta_time
-        )
-
-        # Move forward/back along the camera's viewing direction.
-        if Qt.Key_W in self.keys:
-            self.camera.position += (
-                self.camera.front
-                * speed
-            )
-
-        if Qt.Key_S in self.keys:
-            self.camera.position -= (
-                self.camera.front
-                * speed
-            )
-
-        # Side-step relative to the camera's local right axis.
-        if Qt.Key_D in self.keys:
-            self.camera.position += (
-                self.camera.right
-                * speed
-            )
-
-        if Qt.Key_A in self.keys:
-            self.camera.position -= (
-                self.camera.right
-                * speed
-            )
-
-        # Vertical movement is independent of the viewing direction and tracks the
-        # scene's world-up axis, which makes it easier to inspect the model from
-        # above or below while still looking around.
-        if Qt.Key_Space in self.keys:
-            self.camera.position += (
-                self.camera.world_up
-                * speed
-            )
-
-        if Qt.Key_C in self.keys:
-            self.camera.position -= (
-                self.camera.world_up
-                * speed
-            )
+    def update_camera(self, delta_time):
+        self.camera_controller.advance(delta_time, blocked=self.drag is not None or self._box_start is not None)
 
     def focusOutEvent(self, event):
         """Stop camera input when the user moves focus into an editor panel."""
@@ -955,11 +877,7 @@ class OpenGLViewport(QOpenGLWidget):
         Args:
             event: Qt keyboard event.
         """
-        # Selection modifiers and editor shortcuts must never start (or keep)
-        # camera movement. Qt maps the macOS Command key to Key_Control.
-        if event.key() in self.SHORTCUT_KEYS or event.modifiers() & self.SHORTCUT_MODIFIERS:
-            self.keys.clear()
-            event.ignore()
+        if self.camera_controller.key_press(event):
             return
         if event.isAutoRepeat():
             event.accept()
@@ -984,27 +902,11 @@ class OpenGLViewport(QOpenGLWidget):
             self.tools_visibility_requested.emit()
             event.accept()
             return
-        if event.key() in self.CAMERA_KEYS:
-            self.keys.add(event.key())
-            event.accept()
-        else:
-            super().keyPressEvent(event)
+        super().keyPressEvent(event)
 
-    def keyReleaseEvent(
-        self,
-        event
-    ):
-        """Remove a key from the active input set when released.
-
-        Args:
-            event: Qt keyboard event.
-        """
-        if event.isAutoRepeat():
-            return
-        # Shortcut letters stay unarmed until pressed again without modifiers.
-        self.keys.discard(
-            event.key()
-        )
+    def keyReleaseEvent(self, event):
+        if not self.camera_controller.key_release(event):
+            super().keyReleaseEvent(event)
 
     def mousePressEvent(self, event):
         """Start look-around camera control while the right mouse button is held.
@@ -1180,10 +1082,7 @@ class OpenGLViewport(QOpenGLWidget):
         ):
             return
 
-        self.camera.rotate(
-            dx,
-            dy
-        )
+        self.camera_controller.look(dx, dy)
 
         # Mark the next recentering move event as synthetic.
         self.ignore_center_event = True

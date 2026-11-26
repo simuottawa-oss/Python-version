@@ -18,6 +18,8 @@ from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from PySide6.QtCore import Qt, QTimer, QPoint
 from PySide6.QtGui import QCursor
 
+from simuo.rendering.camera import Camera  # Compatibility export for older callers
+from simuo.rendering.camera_controller import CameraController
 from simuo.physics.viewport.ray import Ray
 from simuo.physics.viewport.mover import Mover
 from simuo.parts.part_assets import loadObjFlatShaded  # Compatibility export for existing callers
@@ -243,176 +245,12 @@ def createAxisLines(
         dtype=np.float32
     )
 
-class Camera:
-    def __init__(self):
-        
-        
-        """Initialize camera position and Euler view angles, then compute its viewing
-        basis.
-
-        Returns:
-            None.
-        """
-        self.position = glm.vec3(
-            0.0,
-            2.0,
-            28.0
-        )
-
-        self.yaw = -90.0
-        self.pitch = 0.0
-
-        self.world_up = glm.vec3(
-            0.0,
-            1.0,
-            0.0
-        )
-
-        self.front = glm.vec3(
-            0.0,
-            0.0,
-            -1.0
-        )
-
-        self.right = glm.vec3(
-            1.0,
-            0.0,
-            0.0
-        )
-
-        self.up = glm.vec3(
-            0.0,
-            1.0,
-            0.0
-        )
-
-        self.update_vectors()
-
-    def update_vectors(self):
-        """Recompute normalized forward, right, and up vectors from yaw/pitch in degrees.
-
-        Returns:
-            None. Mutates the camera basis.
-        """
-        yaw = math.radians(
-            self.yaw
-        )
-
-        pitch = math.radians(
-            self.pitch
-        )
-
-        front = glm.vec3(
-            math.cos(yaw)
-            * math.cos(pitch),
-
-            math.sin(pitch),
-
-            math.sin(yaw)
-            * math.cos(pitch),
-        )
-
-        self.front = glm.normalize(
-            front
-        )
-
-        self.right = glm.normalize(
-            glm.cross(
-                self.front,
-                self.world_up
-            )
-        )
-
-        self.up = glm.normalize(
-            glm.cross(
-                self.right,
-                self.front
-            )
-        )
-
-    def rotate(
-        self,
-        dx,
-        dy,
-        sensitivity=0.12
-    ):
-        """Apply pointer deltas to yaw/pitch, clamp pitch to avoid flipping, and rebuild
-        the basis.
-
-        Args:
-            dx (float): Horizontal pointer displacement in pixels.
-            dy (float): Vertical pointer displacement in pixels, positive for upward
-                look.
-            sensitivity (float): Degrees of rotation per pointer pixel.
-
-        Returns:
-            None. Mutates camera angles and vectors.
-        """
-        self.yaw += (
-            dx * sensitivity
-        )
-
-        self.pitch += (
-            dy * sensitivity
-        )
-
-        self.pitch = max(
-            -89.0,
-            min(
-                89.0,
-                self.pitch
-            )
-        )
-
-        self.update_vectors()
-
-    def view_matrix(self):
-        """Build the camera's world-to-view transform from position and basis.
-
-        Returns:
-            glm.mat4: Look-at view matrix.
-        """
-        return glm.lookAt(
-            self.position,
-            self.position
-            + self.front,
-            self.up,
-        )
-
-
-    def mouse_ray(self, event, width, height, projection, view):
-        """Unproject a pointer location into a normalized world-space camera ray.
-
-        Args:
-            event: Qt mouse event with a widget-local position in logical pixels.
-            width: Positive viewport width in logical pixels.
-            height: Positive viewport height in logical pixels.
-            projection: Perspective projection matrix matching the rendered view.
-            view: Camera world-to-view matrix.
-
-        Returns:
-            tuple: Camera origin and normalized direction as glm.vec3 values.
-        """
-        x_ndc = 2.0 * event.position().x() / width - 1.0
-        y_ndc = 1.0 - 2.0 * event.position().y() / height
-        clip = np.array([x_ndc, y_ndc, -1.0, 1.0], dtype=np.float32)
-        inv_projection = np.linalg.inv(np.array(projection, dtype=np.float32))
-        near = inv_projection @ clip
-        near = near / near[3]
-        inv_view = np.linalg.inv(np.array(view, dtype=np.float32))
-        near_world = inv_view @ near
-        near_world = near_world[:3]
-        origin = self.position
-        direction = glm.normalize(glm.vec3(near_world) - origin)
-        return (origin, direction)
-
-
 class OpenGLViewport(QOpenGLWidget):
     def __init__(
         self,
         parent=None,
         scene=None,
-        
+        read_only=False,
     ):
 
             
@@ -425,6 +263,8 @@ class OpenGLViewport(QOpenGLWidget):
                 independent Qt widget.
             scene (Scene, optional): Scene to display/use; None uses the constructor's
                 empty or unbound default.
+            read_only (bool): Disable object picking, gizmos, and manipulation while
+                retaining camera navigation.
 
         Returns:
             None.
@@ -447,6 +287,7 @@ class OpenGLViewport(QOpenGLWidget):
         )
         self.ignore_center_event = False
         self.scene = scene
+        self.read_only = read_only
 
         self.setFocusPolicy(
             Qt.StrongFocus
@@ -458,7 +299,8 @@ class OpenGLViewport(QOpenGLWidget):
 
         self.camera = Camera()
 
-        self.keys = set()
+        self.camera_controller = CameraController(self)
+        self.keys = self.camera_controller.keys
 
         self.right_mouse_down = False
         self.last_mouse_position = None
@@ -1112,7 +954,7 @@ class OpenGLViewport(QOpenGLWidget):
             glBindVertexArray(0)
             glUseProgram(0)
 
-        if self.mover is not None:
+        if not self.read_only and self.mover is not None:
             vertex_data, segments = self.mover.build_render_data()
             glDisable(GL_DEPTH_TEST)
             glUseProgram(self.gizmoShader)
@@ -1143,106 +985,21 @@ class OpenGLViewport(QOpenGLWidget):
     # CAMERA INPUT
     # ---------------------------------------------------------
 
-    def update_camera(
-        self,
-        delta_time
-    ):
-        """Move and turn the camera from held keys, scaling speeds by elapsed time.
+    def update_camera(self, delta_time):
+        dragging = self.mover is not None and self.mover.dragging_axis is not None
+        self.camera_controller.advance(delta_time, blocked=dragging)
 
-        Args:
-            delta_time (float): Elapsed frame time in seconds used to scale movement.
-
-        Returns:
-            None. Updates camera position and viewing basis.
-        """
-        turn = int(Qt.Key_Right in self.keys) - int(Qt.Key_Left in self.keys)
-        if turn:
-            self.camera.yaw += turn * 90.0 * delta_time
-            self.camera.update_vectors()
-
-        speed = (
-            10.0
-            * delta_time
-        )
-
-        if Qt.Key_W in self.keys:
-            self.camera.position += (
-                self.camera.front
-                * speed
-            )
-
-        if Qt.Key_S in self.keys:
-            self.camera.position -= (
-                self.camera.front
-                * speed
-            )
-
-        if Qt.Key_D in self.keys:
-            self.camera.position += (
-                self.camera.right
-                * speed
-            )
-
-        if Qt.Key_A in self.keys:
-            self.camera.position -= (
-                self.camera.right
-                * speed
-            )
-
-        if Qt.Key_Space in self.keys:
-            self.camera.position += (
-                self.camera.world_up
-                * speed
-            )
-
-        if Qt.Key_Control in self.keys:
-            self.camera.position -= (
-                self.camera.world_up
-                * speed
-            )
-
-    def keyPressEvent(
-        self,
-        event
-    ):
-        """Track a pressed key for continuous movement and request window closure on
-        Escape.
-
-        Args:
-            event (Qt event): Input, paint, resize, focus, or close event delivered by
-                the framework.
-
-        Returns:
-            None. Mutates held-key state.
-        """
-        self.keys.add(
-            event.key()
-        )
-
-        if (
-            event.key()
-            == Qt.Key_Escape
-        ):
-            self.window().close()
-
-    def keyReleaseEvent(
-        self,
-        event
-    ):
-        """Remove a released key from held state, ignoring synthetic auto-repeat releases.
-
-        Args:
-            event (Qt event): Input, paint, resize, focus, or close event delivered by
-                the framework.
-
-        Returns:
-            None.
-        """
-        if event.isAutoRepeat():
+    def keyPressEvent(self, event):
+        if self.camera_controller.key_press(event):
             return
-        self.keys.discard(
-            event.key()
-        )
+        if event.key() == Qt.Key_Escape:
+            self.window().close()
+        else:
+            super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event):
+        if not self.camera_controller.key_release(event):
+            super().keyReleaseEvent(event)
 
     def focusOutEvent(self, event):
         # File dialogs and switching applications can swallow key-up events.
@@ -1275,7 +1032,7 @@ class OpenGLViewport(QOpenGLWidget):
         Returns:
             None. Updates selection/drag state or captures the pointer for mouse look.
         """
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.LeftButton and not self.read_only:
             width, height = max(1, self.width()), max(1, self.height())
             projection = glm.perspective(glm.radians(60.0), width / height, 0.1, 1000.0)
             origin, direction = self.camera.mouse_ray(
@@ -1317,7 +1074,7 @@ class OpenGLViewport(QOpenGLWidget):
             self.releaseMouse()
             self.unsetCursor()
 
-        if event.button() == Qt.LeftButton and self.mover is not None:
+        if event.button() == Qt.LeftButton and not self.read_only and self.mover is not None:
             if self.mover.dragging_axis is not None:
                 self.mover.end_drag()
             
@@ -1331,7 +1088,7 @@ class OpenGLViewport(QOpenGLWidget):
         Returns:
             None. Updates a selected part and dirty state, or the camera and pointer.
         """
-        if self.mover is not None:
+        if not getattr(self, "read_only", False) and self.mover is not None:
             width, height = max(1, self.width()), max(1, self.height())
             projection = glm.perspective(glm.radians(60.0), width / height, 0.1, 1000.0)
             origin, direction = self.camera.mouse_ray(
@@ -1374,10 +1131,7 @@ class OpenGLViewport(QOpenGLWidget):
         ):
             return
 
-        self.camera.rotate(
-            dx,
-            dy
-        )
+        self.camera_controller.look(dx, dy)
 
         self.ignore_center_event = True
 

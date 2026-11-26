@@ -1,0 +1,16 @@
+{
+  "format": "simuo.material",
+  "version": 1,
+  "material": {
+    "name": "ABS (unfilled)",
+    "young_modulus": 2300000000.0,
+    "poisson_ratio": 0.35,
+    "density": 1040.0,
+    "preset_id": "abs",
+    "yield_strength": null,
+    "ultimate_tensile_strength": null
+  },
+  "source_url": "https://www.ineos-styrolution.com/Product/Terluran_Terluran-GP-22_SKU300600120827_lang_en_GB.html",
+  "strength_source_url": null,
+  "strength_notes": null
+}

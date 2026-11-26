@@ -1,0 +1,16 @@
+{
+  "format": "simuo.material",
+  "version": 1,
+  "material": {
+    "name": "Polycarbonate (unfilled)",
+    "young_modulus": 2400000000.0,
+    "poisson_ratio": 0.37,
+    "density": 1200.0,
+    "preset_id": "polycarbonate",
+    "yield_strength": null,
+    "ultimate_tensile_strength": null
+  },
+  "source_url": "https://www.covestro.com/en/products/makrolon-2405-00945088",
+  "strength_source_url": null,
+  "strength_notes": null
+}

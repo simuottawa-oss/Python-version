@@ -1,0 +1,16 @@
+{
+  "format": "simuo.material",
+  "version": 1,
+  "material": {
+    "name": "304 stainless steel",
+    "young_modulus": 200000000000.0,
+    "poisson_ratio": 0.3,
+    "density": 7900.0,
+    "preset_id": "stainless-304",
+    "yield_strength": null,
+    "ultimate_tensile_strength": null
+  },
+  "source_url": "https://www.outokumpu.com/en/products/product-ranges/core",
+  "strength_source_url": null,
+  "strength_notes": null
+}

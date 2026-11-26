@@ -61,6 +61,15 @@ jobs:
             throw 'Packaged startup timed out'
           }
           if ($process.ExitCode -ne 0) { throw "Packaged startup failed: $($process.ExitCode)" }
+      - name: Packaged structural meshing and solver
+        run: |
+          $exe = Join-Path $PWD 'dist\SimuO.exe'
+          $process = Start-Process -FilePath $exe -ArgumentList '--structural-smoke' -WorkingDirectory $env:RUNNER_TEMP -PassThru
+          if (-not $process.WaitForExit(180000)) {
+            $process.Kill()
+            throw 'Packaged structural smoke test timed out'
+          }
+          if ($process.ExitCode -ne 0) { throw "Packaged structural smoke test failed: $($process.ExitCode)" }
       - uses: actions/upload-artifact@v4
         with:
           name: SimuO-Windows-x64
