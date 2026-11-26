@@ -44,7 +44,7 @@ class PartMenuTests(unittest.TestCase):
     def test_toolbar_actions_have_clear_names_and_guidance(self):
         toolbar = self.editor.findChild(QToolBar)
         actions = {a.text(): a for a in toolbar.actions() if not a.isSeparator()}
-        self.assertTrue({'Draw lines','Select line','Close outline','Add dimension…','Frame sketch'}.issubset(actions))
+        self.assertTrue({'Draw lines','Select line','Close outline','Add dimension...','Frame sketch'}.issubset(actions))
         self.assertTrue(all(action.toolTip() for action in actions.values()))
 
     def test_properties_panel_is_scrollable_and_recovers_after_narrow_layout(self):

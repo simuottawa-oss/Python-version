@@ -3,13 +3,14 @@ import copy
 import math
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QPointF, QRectF, Signal, QItemSelectionModel
+from PySide6.QtCore import Qt, QPointF, QRectF, QSize, Signal, QItemSelectionModel
 from PySide6.QtGui import QAction, QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QFormLayout, QLabel, QPushButton, QDoubleSpinBox, QLineEdit, QTableWidget,
     QTableWidgetItem, QFileDialog, QMessageBox, QInputDialog, QAbstractItemView, QHeaderView,
     QDockWidget, QScrollArea, QListWidget, QListWidgetItem)
 
+from simuo.ui import icons
 from simuo.parts.part_document import new_document, open_document, save_document
 from simuo.parts.sketch_geometry import Sketch
 from simuo.parts.part_export import export_sketch
@@ -574,10 +575,13 @@ class SketchCanvas(QWidget):
             painter.drawRect(QRectF(marker.x()-7,marker.y()-7,14,14))
             painter.drawText(marker+QPointF(12,20),label+" · locked")
         painter.setPen(QColor("#b1c5d8"))
-        hint = "Arc: start → point on curve → end" if self.arc_mode else "XY sketch · millimeters · click the first point to enclose a face"
-        if self.circle_mode:
-            hint = "Circle: click center → click edge · Esc cancels"
-        painter.drawText(14,24,hint if self.circle_mode else getattr(self.editor,"sketch_plane_label",hint))
+        tool_hint = getattr(self.editor,"tool_hint","")
+        plane = getattr(self.editor,"sketch_plane_label",None)
+        if plane:
+            painter.drawText(14,24,plane)
+            painter.drawText(14,42,tool_hint)
+        else:
+            painter.drawText(14,24,tool_hint)
 
 
 
@@ -611,6 +615,7 @@ class PartEditor(QMainWindow):
         self.path = None
         self.dirty = False
         self.history,self.future = [],[]
+        self.tool_hint = ""
         self.canvas = SketchCanvas(self)
         self.canvas.selected.connect(self.select_line)
         self.canvas.dimension_requested.connect(self.dimension_dialog)
@@ -640,7 +645,7 @@ class PartEditor(QMainWindow):
         self.length.setRange(.001,1e9)
         self.length.setDecimals(4)
         self.length.setSuffix(" mm")
-        self.length.setToolTip("Length of the selected line in millimeters")
+        self.length.setToolTip("Length (mm)")
         self.dimension_label = QLabel("Selected line length:")
         side.addWidget(self.dimension_label)
         side.addWidget(self.length)
@@ -724,7 +729,9 @@ class PartEditor(QMainWindow):
         edit_menu = self.menuBar().addMenu("Edit")
         toolbar = self.addToolBar("Sketch")
         toolbar.setMovable(False)
-        self.addToolBar(Qt.LeftToolBarArea, toolbar)
+        toolbar.setIconSize(QSize(24,24))
+        toolbar.setToolButtonStyle(Qt.ToolButtonIconOnly)
+        self.addToolBar(Qt.TopToolBarArea, toolbar)
         for name,shortcut,callback in [("Open Part…","Ctrl+O",self.open_part),
                                        ("Save SimuO Part","Ctrl+S",self.save),("Save SimuO Part As…","Ctrl+Shift+S",self.save_as)]:
             action = QAction(name,self)
@@ -752,31 +759,41 @@ class PartEditor(QMainWindow):
         self.canvas.addAction(delete_line)
         self.lines.addAction(delete_line)
         self.line_action = QAction("Draw lines",self)
-        self.line_action.setToolTip("Click to place connected points. Click the first point to close the outline. Esc switches to selection.")
+        self.line_action.setIcon(icons.line_icon())
+        self.line_action.setToolTip("Draw line")
         self.line_action.setCheckable(True)
         self.line_action.setChecked(True)
         self.line_action.toggled.connect(self.set_drawing)
         toolbar.addAction(self.line_action)
         self.arc_action = QAction("Draw arcs",self)
+        self.arc_action.setIcon(icons.arc_icon())
         self.arc_action.setCheckable(True)
-        self.arc_action.setToolTip("Three-point arc: click the start, a point on the curve, and the end. Connected arcs reuse the last endpoint.")
+        self.arc_action.setToolTip("Draw arc")
         self.arc_action.toggled.connect(self.set_arcs)
         toolbar.addAction(self.arc_action)
         self.circle_action = QAction("Draw circle",self)
+        self.circle_action.setIcon(icons.circle_icon())
         self.circle_action.setCheckable(True)
-        self.circle_action.setToolTip("Click the center, then the edge to create a closed circle. Esc cancels. Add a dimension to set its radius.")
+        self.circle_action.setToolTip("Draw circle")
         self.circle_action.toggled.connect(self.set_circles)
         toolbar.addAction(self.circle_action)
         self.select_action = QAction("Select line", self)
-        self.select_action.setToolTip("Select a line or dimension label, or drag an endpoint to move it within its constraints")
+        self.select_action.setIcon(icons.select_icon())
+        self.select_action.setToolTip("Select")
         self.select_action.triggered.connect(self.select_mode)
         toolbar.addAction(self.select_action)
+        tool_icons = {
+            "Close outline": icons.close_outline_icon(),
+            "Add dimension...": icons.dimension_icon(),
+            "Frame sketch": icons.frame_icon(),
+        }
         for name,callback,hint in [
-            ("Close outline",self.close_face,"Connect the last point to the first to create a face"),
-            ("Add dimension…",lambda: self.dimension_dialog(self.canvas.selection),"Add or edit a line length or arc radius in millimeters"),
-            ("Frame sketch",self.canvas.fit,"Fit the entire sketch in the viewport (F)"),
+            ("Close outline",self.close_face,"Close outline"),
+            ("Add dimension...",lambda: self.dimension_dialog(self.canvas.selection),"Add dimension"),
+            ("Frame sketch",self.canvas.fit,"Frame sketch"),
         ]:
             action = QAction(name,self)
+            action.setIcon(tool_icons[name])
             action.setToolTip(hint)
             action.setStatusTip(hint)
             action.triggered.connect(callback)
@@ -788,7 +805,7 @@ class PartEditor(QMainWindow):
         view_menu.addAction(frame_action)
         self.origin_action = QAction("Center sketch origin",self)
         self.origin_action.setShortcut("O")
-        self.origin_action.setToolTip("Center the sketch plane's (0, 0) point without changing geometry")
+        self.origin_action.setToolTip("Center origin")
         self.origin_action.triggered.connect(self.canvas.center_origin)
         view_menu.addAction(self.origin_action)
         view_menu.addAction(self.propertiesDock.toggleViewAction())
@@ -800,7 +817,7 @@ class PartEditor(QMainWindow):
         relations_menu = self.menuBar().addMenu("Constraints")
         for title,kind in (("Make horizontal","horizontal"),("Make vertical","vertical"),("Make equal","equal")):
             action = QAction(title,self)
-            action.setToolTip("Select straight lines first; Ctrl-click to select several")
+            action.setToolTip(title)
             action.triggered.connect(lambda checked=False,k=kind:self.apply_geometric_constraint(k))
             relations_menu.addAction(action)
         relations_menu.addSeparator()
@@ -871,6 +888,8 @@ class PartEditor(QMainWindow):
         self.canvas.arc_mode = False
         self.canvas.arc_through = None
         self.canvas.drawing = value
+        if value:
+            self.tool_hint = "Click to place points · click the first point to close · Esc: select"
         self.canvas.update()
 
     def set_arcs(self,value):
@@ -892,6 +911,8 @@ class PartEditor(QMainWindow):
         self.canvas.arc_mode = value
         self.canvas.arc_through = None
         self.canvas.drawing = value
+        if value:
+            self.tool_hint = "Arc: start → point on curve → end · Esc cancels"
         self.canvas.update()
 
     def set_circles(self,value):
@@ -912,9 +933,9 @@ class PartEditor(QMainWindow):
         self.canvas.arc_mode = False
         self.canvas.arc_through = None
         self.canvas.drawing = value
-        self.canvas.update()
         if value:
-            self.statusBar().showMessage("Circle: click the center, then the edge. Esc cancels.")
+            self.tool_hint = "Circle: click center → click edge · Esc cancels"
+        self.canvas.update()
 
     def select_mode(self):
         """Disable all drawing tools and discard pending curve preview points.
@@ -928,6 +949,7 @@ class PartEditor(QMainWindow):
         self.canvas.circle_center = None
         self.canvas.arc_through = None
         self.canvas.drawing = False
+        self.tool_hint = "Click a segment to select · drag an endpoint to move it"
         self.canvas.update()
 
     def commit(self,candidate):
@@ -1032,7 +1054,7 @@ class PartEditor(QMainWindow):
         dimension = self.sketch.dimensions[index]
         arc = self.sketch.is_arc(index)
         self.dimension_label.setText("Arc radius:" if arc else "Selected line length:")
-        self.length.setToolTip("Radius of the selected arc in millimeters" if arc else "Length of the selected line in millimeters")
+        self.length.setToolTip("Radius (mm)" if arc else "Length (mm)")
         self.dimension_button.setText("Add dimension" if dimension is None else "Update dimension")
         self.remove_dimension_button.setEnabled(dimension is not None)
         self.length.setEnabled(True)

@@ -3,12 +3,13 @@ import copy
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QAction, QColor, QPen, QPolygonF
 from PySide6.QtWidgets import (QDockWidget, QTreeWidget, QTreeWidgetItem, QStackedWidget,
     QDialog, QVBoxLayout, QFormLayout, QDoubleSpinBox, QCheckBox, QDialogButtonBox,
     QMessageBox, QFileDialog, QToolBar, QLabel)
 
+from simuo.ui import icons
 from simuo.ui.parts.part_editor import PartEditor
 from simuo.ui.parts.part_viewport import PartViewport
 from simuo.parts.feature_document import new_feature_document,open_feature_document,save_feature_document
@@ -54,13 +55,23 @@ class FeaturePartEditor(PartEditor):
         self.resizeDocks([self.hierarchyDock],[180],Qt.Horizontal)
         toolbar = QToolBar("Features",self)
         self.addToolBar(Qt.TopToolBarArea,toolbar)
+        toolbar.setIconSize(QSize(24,24))
+        toolbar.setToolButtonStyle(Qt.ToolButtonIconOnly)
         menu = self.menuBar().addMenu("Features")
         self.feature_actions = {}
+        feature_tool_icons = {
+            "3D View": icons.model_3d_icon(),
+            "New Sketch": icons.new_sketch_icon(),
+            "Extrude…": icons.extrude_icon(),
+            "Finish Sketch": icons.finish_icon(),
+            "Edit Sketch": icons.pencil_icon(),
+        }
         for name,callback in [("3D View",self.view_model),("New Sketch",self.new_sketch),
                               ("Extrude…",self.extrude_dialog),("Finish Sketch",self.finish_sketch),
                               ("Edit Sketch",self.edit_sketch)]:
             action = QAction(name,self)
-            action.setToolTip(name+" on the selected reference plane, sketch or face")
+            action.setIcon(feature_tool_icons[name])
+            action.setToolTip(name)
             action.triggered.connect(callback)
             menu.addAction(action)
             toolbar.addAction(action)
@@ -224,7 +235,7 @@ class FeaturePartEditor(PartEditor):
         for i,face in enumerate(self.model.faces):
             item = QTreeWidgetItem(faces,[face["label"]])
             item.setData(0,Qt.UserRole,("face",i))
-            item.setToolTip(0,"Select this flat face, then New Sketch")
+            item.setToolTip(0,"New sketch on this face")
         planes.setExpanded(True)
         features.setExpanded(True)
         self.tree.blockSignals(False)
