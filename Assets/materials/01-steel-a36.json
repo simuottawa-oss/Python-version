@@ -1,0 +1,16 @@
+{
+  "format": "simuo.material",
+  "version": 1,
+  "material": {
+    "name": "A36 steel",
+    "young_modulus": 200000000000.0,
+    "poisson_ratio": 0.3,
+    "density": 7850.0,
+    "preset_id": "steel-a36",
+    "yield_strength": 248211262.554048,
+    "ultimate_tensile_strength": 399895923.003744
+  },
+  "source_url": "https://www.ssab.com/en/support/product-material-data/steel/20-questions",
+  "strength_source_url": "https://www.ssab.com/en-us/brands-and-products/commercial-steel/structural-steel/astm-a36",
+  "strength_notes": "Strength reference: SSAB A36 plate, 2.54\u2013152 mm; 36 ksi minimum yield, 58 ksi minimum UTS."
+}

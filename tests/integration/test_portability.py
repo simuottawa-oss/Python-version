@@ -1,5 +1,4 @@
 """Portable scene references and Windows-compatible atomic file cleanup."""
-import json
 import os
 import subprocess
 from pathlib import Path
@@ -9,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from tests import ROOT
+from simuo.project.project_format import read_project
 from simuo.project.project_paths import resolve_mesh_path, stored_mesh_path
 from simuo.resources.paths import resource_path
 from simuo.project.temporary_parts import atomic_write
@@ -70,14 +70,18 @@ class PortabilityTests(unittest.TestCase):
         self.assertEqual(target.read_bytes(), b"previous scene")
         self.assertEqual(list(self.root.glob(".scene.simuO.*")), [])
 
-    def test_repository_scenes_reference_existing_relative_parts(self):
-        """Require shipped scenes to work directly after relocation, without recovery paths."""
+    def test_repository_projects_reference_existing_relative_parts(self):
+        """Require shipped projects to work directly after relocation."""
         projects = list((ROOT / "Assets").glob("*.simuO"))
         projects += list((ROOT / "tests/fixtures").glob("*.simuO"))
         self.assertTrue(projects)
         for project in projects:
-            for item in json.loads(project.read_text(encoding="utf-8"))["objects"]:
-                reference = item["meshPath"]
+            document = read_project(project)
+            if document.project_type == "scene":
+                references = tuple(item["meshPath"] for item in document.data["objects"])
+            else:
+                references = (document.data["setup"]["geometry_path"],)
+            for reference in references:
                 with self.subTest(project=project.name, reference=reference):
                     self.assertFalse(Path(reference).is_absolute())
                     target = (project.parent / reference).resolve()

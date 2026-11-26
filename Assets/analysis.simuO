@@ -1,0 +1,72 @@
+{
+  "format": ".simuO",
+  "version": 2,
+  "project_type": "structural",
+  "setup": {
+    "geometry_path": "Beam.simuOPart",
+    "geometry_fingerprint": "2c10ae86378feaff6c648caa4a363d2a7a981594da5c71fc25cd87de2d3016c1",
+    "units": "m",
+    "material": {
+      "young_modulus": 69000000000.0,
+      "poisson_ratio": 0.33,
+      "density": 2700.0,
+      "name": "6061-T6 aluminum",
+      "preset_id": "aluminum-6061-t6",
+      "yield_strength": 240000000.0,
+      "ultimate_tensile_strength": 260000000.0
+    },
+    "mesh": {
+      "target_size": 0.125,
+      "feature_angle": 40.0
+    },
+    "supports": [],
+    "loads": [
+      {
+        "triangles": [
+          21,
+          38
+        ],
+        "kind": "force",
+        "value": [
+          0.0,
+          -2500000.0,
+          0.0
+        ],
+        "identifier": "4e1f1aa432d54e16b1dab4b60b4fd4ca",
+        "name": "Face Force"
+      }
+    ],
+    "gravity": [
+      0.0,
+      -9.80665,
+      0.0
+    ],
+    "beam": null,
+    "point_loads": [],
+    "support_names": [],
+    "support_conditions": [
+      {
+        "kind": "fixed_face",
+        "triangles": [
+          7,
+          10,
+          12,
+          20,
+          22,
+          30,
+          33,
+          34,
+          42,
+          43,
+          47
+        ],
+        "source_triangle": null,
+        "barycentric": [],
+        "identifier": "d0753ccc759247aba1ba279534b39bac",
+        "name": "Fixed Face"
+      }
+    ],
+    "area_loads": [],
+    "setup_version": 3
+  }
+}

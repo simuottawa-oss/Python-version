@@ -1,5 +1,6 @@
 """Rigid-body integration checks without a display or GPU."""
 from dataclasses import replace
+import copy
 import math
 import unittest
 
@@ -151,6 +152,65 @@ class PhysicsTests(unittest.TestCase):
     def test_invalid_scale_rejected(self):
         with self.assertRaises(ValueError):
             self.world(self.part(scale=[0,1,1]))
+
+    def motion(self, world):
+        return [[*o.position, *o.rotation, *o.velocity, *o.angularVelocity]
+                for o in world.scene.objects]
+
+    def test_step_back_restores_collision_state_and_resumes(self):
+        world = self.world(self.part(position=[0, .11, 0], velocity=[1, -2, 0],
+                                     angularVelocity=[0, 1, 0]))
+        self.assertFalse(world.can_step_back)
+        self.assertFalse(world.step_back())
+        world.step(130)
+        previous = self.motion(world)
+        world.step()
+        future = self.motion(world)
+        self.assertTrue(world.step_back())
+        self.assertEqual(world.steps, 130)
+        self.assertAlmostEqual(world.time, 130 * world.dt)
+        np.testing.assert_allclose(self.motion(world), previous, atol=1e-8)
+        world.step()
+        np.testing.assert_allclose(self.motion(world), future, atol=1e-8)
+
+    def test_rewind_kinematic_and_dynamic_motion_to_initial_state(self):
+        platform = self.part(position=[-1, 0, 0], velocity=[2, 0, 0],
+                             acceleration=[1, 0, 0], body_type="kinematic")
+        source_state = copy.deepcopy(platform.__dict__)
+        world = self.world(platform, self.part(position=[0, 0, 0]), gravity=0, floor=False)
+        world.history_interval = 3
+        world.history_limit = 2
+        initial = self.motion(world)
+        world.step(17)
+        expected = self.motion(world)
+        world.step()
+        self.assertLessEqual(len(world._history), 3)
+        world.step_back()
+        np.testing.assert_allclose(self.motion(world), expected, atol=1e-8)
+        while world.can_step_back:
+            world.step_back()
+        self.assertEqual(world.steps, 0)
+        np.testing.assert_allclose(self.motion(world), initial, atol=1e-8)
+        self.assertEqual(platform.position, source_state["position"])
+        self.assertEqual(platform.velocity, source_state["velocity"])
+
+    def test_settings_reset_history_and_release_saved_states(self):
+        world = self.world(self.part(), floor=False)
+        world.step(80)
+        world.set_gravity(0)
+        self.assertFalse(world.can_step_back)
+        self.assertEqual(len(world._history), 1)
+        motion = self.motion(world)
+        world.step()
+        world.step_back()
+        self.assertEqual(world.steps, 80)
+        np.testing.assert_allclose(self.motion(world), motion, atol=1e-8)
+        world.reset()
+        self.assertEqual(world.steps, 0)
+        self.assertFalse(world.can_step_back)
+        self.assertEqual(list(world._history), [0])
+        world.close()
+        self.assertEqual(world._history, {})
 
 
 if __name__ == "__main__":

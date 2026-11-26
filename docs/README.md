@@ -3,6 +3,8 @@
 - [Scene editor](scene-editor.md) covers panels, selection, transforms, and physics playback.
 - [Part editor](part-editor.md) covers sketches, extrusions, constraints, and export.
 - [File formats](file-formats.md) covers scenes, parts, and compatibility.
+- [Material presets](materials.md) documents the shared material inspector and property sources.
+- [Structural analysis](structural-analysis.md) covers solid meshing, loads, stress and beam diagrams.
 - [Installation](../README.md) covers Windows, Linux Mint, and macOS.
 
 ## Project layout
@@ -17,6 +19,7 @@
 | `src/simuo/parts/` | Part validation, sketch and feature geometry, and export |
 | `src/simuo/rendering/` | Scene editor viewport, picking, selection outlines, and gizmos |
 | `src/simuo/physics/` | Bullet simulation and the separate playback viewport |
+| `src/simuo/structural/` | Geometry import, Gmsh, quadratic FEM, stress recovery, persistence and worker processes |
 | `src/simuo/resources/`, `Assets/`, `Images/` | Styles, sample models and scenes, and app images |
 | `tests/` | Unit tests, integration tests, desktop checks, and fixtures |
 | `experiments/part_playground/` | Standalone physics prototype with its own checks |
@@ -43,6 +46,11 @@ Pass `--new` to start with an empty scene, `--part-editor` to open the Part
 Editor, or a path to a `.simuO` scene or `.simuOPart` file. Both `src/main.py`
 and the launchers accept these arguments. Set `SIMUO_PYTHON` to have a launcher
 use a different Python environment.
+
+Pass `--structural` for the Structural Analysis workspace, optionally followed
+by a solid or structural `.simuO` project. Project JSON selects the workspace;
+legacy `.simuOAnalysis` files remain readable.
+`--structural-smoke` runs real meshing and solving in spawned processes and exits.
 
 ## Testing
 

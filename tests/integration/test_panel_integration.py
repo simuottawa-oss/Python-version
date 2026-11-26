@@ -106,6 +106,20 @@ class PanelIntegrationTests(unittest.TestCase):
         self.assertEqual(loaded.acceleration, [.5, 0, 0])
         self.assertEqual(loaded.restitution, .75)
 
+    def test_debug_panel_is_registered_and_hidden_by_default(self):
+        self.assertTrue(hasattr(self.window, "debugDock"))
+        self.assertTrue(hasattr(self.window, "debugLabel"))
+        self.assertEqual(self.window.debugDock.windowTitle(), "Debug Info")
+        self.assertFalse(self.window.debugDock.isVisible())
+        self.assertIn(self.window.debugDock.toggleViewAction(), self.window.windowMenu.actions())
+        self.assertEqual(self.window.debugLabel.text(), "")
+
+        action = self.window.debugDock.toggleViewAction()
+        self.assertFalse(action.isChecked())
+        action.trigger()
+        self.app.processEvents()
+        self.assertTrue(action.isChecked())
+
     def test_upstream_scene_keeps_physics_after_panel_edits(self):
         source = self.folder / "upstream.simuO"
         mesh = str(ROOT / "Assets/aluminum_cube.simuOPart")

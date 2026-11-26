@@ -220,6 +220,11 @@ class PropertiesPanel(QWidget):
             self.reset_buttons[attribute] = reset
         form.addWidget(self.transform_section)
 
+        from simuo.ui.material_inspector import MaterialInspector
+        self.material_section = MaterialInspector()
+        self.material_section.material_changed.connect(lambda value: state.set_material(self._displayed_id, value))
+        form.addWidget(self.material_section)
+
         self.physics_section = InspectorSection(
             "Physics", lambda: self._reset_physics(), "Restore the part's physics defaults and clear acceleration",
         )
@@ -378,6 +383,11 @@ class PropertiesPanel(QWidget):
         self._displayed_id = obj.identifier if obj is not None else None
         self._displayed_ids = self.state.selected_ids
         self._show_physics(obj if len(self._displayed_ids) == 1 else None)
+        from simuo.materials import inherited_material
+        single = obj is not None and len(self._displayed_ids) == 1
+        self.material_section.setEnabled(single)
+        self.material_section.set_material(obj.material_override if single else None,
+                                           inherited_material(obj.part if single else None))
         selected = self.state.selected_objects
         multiple = len(selected) > 1
         self.stack.setCurrentIndex(1 if obj is not None else 0)

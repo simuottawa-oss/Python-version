@@ -23,6 +23,7 @@ history.
 The **Constraints** list shows dimensions and relations. Delete an entry to
 remove the constraint while keeping the geometry in place. Undo restores it.
 Press `F` to frame the current sketch or model, or `F1` for editor help.
+Use **View → Debug Menu** to show or hide the blank debug dock.
 
 ## Save and export
 

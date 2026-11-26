@@ -1,0 +1,16 @@
+{
+  "format": "simuo.material",
+  "version": 1,
+  "material": {
+    "name": "6061-T6 aluminum",
+    "young_modulus": 69000000000.0,
+    "poisson_ratio": 0.33,
+    "density": 2700.0,
+    "preset_id": "aluminum-6061-t6",
+    "yield_strength": 240000000.0,
+    "ultimate_tensile_strength": 260000000.0
+  },
+  "source_url": "https://www.hydro.com/globalassets/01-products--services/extruded-profiles/americas/ena-resources/alloy-data-sheets/hydro_2019_data_sheet_6061.pdf",
+  "strength_source_url": "https://www.hydro.com/globalassets/01-products--services/extruded-profiles/americas/ena-resources/alloy-data-sheets/hydro_2019_data_sheet_6061.pdf",
+  "strength_notes": "Strength reference: Hydro unwelded T6/T6511 extrusions; 240 MPa minimum yield, 260 MPa minimum UTS."
+}

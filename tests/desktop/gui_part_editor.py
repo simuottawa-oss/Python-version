@@ -14,14 +14,15 @@ def startup_check(action):
     original = main.showStartMenu
     sample = ROOT/"Assets/sketch_plate.simuOPart"
     def automate(*args,**kwargs):
+        from PySide6.QtCore import QTimer
         menu = original(*args,**kwargs)
         def choose():
             if action=="new_part":
                 menu._new_part()
             else:
-                with patch("simuo.ui.startup.filedialog.askopenfilename",return_value=str(sample)):
+                with patch("simuo.ui.startup.QFileDialog.getOpenFileName",return_value=(str(sample), "")):
                     menu._open_part()
-        menu.after(350,choose)
+        QTimer.singleShot(350,choose)
         return menu
     with patch("simuo.app.showStartMenu",side_effect=automate):
         result = main.startup_menu()

@@ -811,7 +811,7 @@ class Sketch:
         return result+[tuple(remaining)]
 
 
-def prism_vertices(sketch):
+def prism_vertices(sketch, dtype=np.float32):
     """Build a flat-shaded closed prism with outward normals, centered on its area centroid
     in XY and symmetric about Z=0.
 
@@ -857,7 +857,7 @@ def prism_vertices(sketch):
             a,b = b,a
         triangle((*points[a],low),(*points[b],low),(*points[b],high))
         triangle((*points[a],low),(*points[b],high),(*points[a],high))
-    output = np.asarray(result,dtype=np.float32)
+    output = np.asarray(result,dtype=dtype)
     if not np.isfinite(output).all():
         raise ValueError("Sketch exceeds the renderer's numeric range")
     return output

@@ -1,0 +1,16 @@
+{
+  "format": "simuo.material",
+  "version": 1,
+  "material": {
+    "name": "C110 copper",
+    "young_modulus": 117000000000.0,
+    "poisson_ratio": 0.328125,
+    "density": 8940.0,
+    "preset_id": "copper-c110",
+    "yield_strength": null,
+    "ultimate_tensile_strength": null
+  },
+  "source_url": "https://ucpcdn.thyssenkrupp.com/_legacy/UCPthyssenkruppBAMXNA/assets.files/tkmna_com/products/collateral/copper-and-alloys-guide.pdf",
+  "strength_source_url": null,
+  "strength_notes": null
+}

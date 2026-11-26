@@ -6,7 +6,7 @@ import glm
 
 
 class Camera:
-    """Represents the viewer's position and orientation in the 3D scene. Only tracks position and orientation."""
+    """Shared camera pose, projection settings, framing and picking rays."""
 
     def __init__(self):
         """Initialize the camera at a default viewing position.
@@ -136,6 +136,37 @@ class Camera:
         )
 
         self.update_vectors()
+
+    def look_at(self, target):
+        """Aim at a target while preserving the current position."""
+        direction = glm.vec3(*target)-self.position
+        if glm.length(direction) == 0:
+            return False
+        direction = glm.normalize(direction)
+        self.yaw = math.degrees(math.atan2(direction.z, direction.x))
+        self.pitch = max(-89., min(89., math.degrees(math.asin(max(-1., min(1., direction.y))))))
+        self.update_vectors()
+        return True
+
+    def frame_points(self, points, aspect, padding=1.15):
+        """Fit world-space bounds to the view, preserving the view direction."""
+        points = [glm.vec3(*point) for point in points]
+        if not points:
+            return False
+        center = glm.vec3(*[(min(p[axis] for p in points)+max(p[axis] for p in points))/2 for axis in range(3)])
+        vertical = math.tan(math.radians(self.field_of_view/2))
+        horizontal = vertical*max(aspect, 1e-9)
+        distance = self.near_plane
+        depths = []
+        for point in points:
+            delta = point-center
+            depth = glm.dot(delta, self.front)
+            depths.append(depth)
+            distance = max(distance, abs(glm.dot(delta, self.right))*padding/horizontal-depth,
+                           abs(glm.dot(delta, self.up))*padding/vertical-depth, self.near_plane*2-depth)
+        self.position = center-self.front*distance
+        self.far_plane = max(self.far_plane, (distance+max(depths))*1.2)
+        return True
 
     def view_matrix(self):
         """Build the OpenGL view matrix for the current camera orientation.

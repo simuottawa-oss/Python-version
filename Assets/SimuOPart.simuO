@@ -2,7 +2,12 @@
     "version": 1,
     "objects": [
         {
+            "id": "6a241696fd4741f8923950421aaa2c03",
             "name": "cube",
+            "editor": {
+                "visible": true,
+                "selection_locked": false
+            },
             "meshPath": "cube.simuOPart",
             "position": [
                 0.0,
@@ -18,7 +23,28 @@
                 1.0,
                 1.0,
                 1.0
+            ],
+            "velocity": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "restitution": 0.0,
+            "body_type": "static",
+            "acceleration": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "angularVelocity": [
+                0.0,
+                0.0,
+                0.0
             ]
         }
+    ],
+    "groups": [],
+    "hierarchy_order": [
+        "6a241696fd4741f8923950421aaa2c03"
     ]
 }

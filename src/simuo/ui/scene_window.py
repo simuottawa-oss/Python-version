@@ -27,13 +27,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from tkinter import filedialog
 from simuo.project.scene import Scene, SceneObject
+from simuo.project.project_format import read_project, project_data, PROJECT_FILTER
+from simuo.materials import material_from_dict
 from simuo.editor.state import EditorState
 from simuo.project.editor_metadata import read_groups, read_object_editor, write_group
 from simuo.rendering.context import configure_opengl
 from simuo.rendering.viewport import OpenGLViewport
 from simuo.ui.docking import PanelManager
+from simuo.ui.recent_projects import remember_project, record_saved_project
 from simuo.ui.panel_registry import editor_panel_specs
 from simuo.ui.theme import load_stylesheet
 from simuo.ui.viewport_tools import create_viewport_tools
@@ -84,6 +86,7 @@ class SimuOMainWindow(QMainWindow):
         self.setCentralWidget(self.viewport)
         self.createToolbar()
         self.createTemporaryPartsPanel()
+        self.createDebugPanel()
         self.viewport.object_picked.connect(self.onViewportPicked)
         self.viewport.box_selection_requested.connect(self.editor_state.select_many)
         self.viewport.transform_started.connect(self.editor_state.begin_transform)
@@ -215,6 +218,23 @@ class SimuOMainWindow(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, self.temporaryPartsDock)
         self.windowMenu.addAction(self.temporaryPartsDock.toggleViewAction())
         self.temporaryPartsDock.hide()
+    def createDebugPanel(self):
+        """Create a dock showing debug information for the current scene.
+
+        Returns:
+            None. Adds its visibility action to the Window menu.
+        """
+        self.debugDock = QDockWidget("Debug Info", self)
+        panel = QWidget(self)
+        layout = QVBoxLayout(panel)
+        self.debugLabel = QLabel(panel)
+        self.debugLabel.setWordWrap(True)
+        self.debugLabel.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(self.debugLabel)
+        self.debugDock.setWidget(panel)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.debugDock)
+        self.windowMenu.addAction(self.debugDock.toggleViewAction())
+        self.debugDock.hide()
 
     def active_temporary_parts(self):
         paths = {Path(obj.meshPath).resolve() for obj in self.scene.objects if obj.meshPath}
@@ -290,14 +310,10 @@ class SimuOMainWindow(QMainWindow):
             None. Updates project path, title, clean state, and camera framing for a
             single JSON part.
         """
-        with open(
-            path,
-            "r",
-            encoding="utf-8"
-        ) as file:
-            data = json.load(
-                file
-            )
+        document = read_project(path)
+        if document.project_type != "scene":
+            raise ValueError("This project belongs to Structural Analysis")
+        data = document.data
 
         loadedObjects = []
 
@@ -351,6 +367,7 @@ class SimuOMainWindow(QMainWindow):
                 objectData.get("acceleration", sceneObject.acceleration),
             )
             sceneObject.angularVelocity = list(objectData.get("angularVelocity", sceneObject.angularVelocity))
+            sceneObject.material_override = material_from_dict(objectData.get("material"))
 
             read_object_editor(sceneObject, objectData)
             loadedObjects.append(sceneObject)
@@ -372,6 +389,8 @@ class SimuOMainWindow(QMainWindow):
 
         if uploadToGPU:
             self.viewport.update()
+
+        remember_project(path)
 
         print(
             "Opened project:",
@@ -407,13 +426,21 @@ class SimuOMainWindow(QMainWindow):
             self,
             "Open SimuO Project",
             "",
-            "SimuO Project Files (*.simuO);;All Files (*)",
+            PROJECT_FILTER,
         )
 
         if not filePath:
             return
 
         path = Path(filePath)
+        try:
+            if read_project(path).project_type == "structural":
+                from simuo.ui.project_open import open_project_window
+                open_project_window(path, self)
+                return
+        except (OSError, ValueError, TypeError) as error:
+            QMessageBox.warning(self, "Cannot Open Project", str(error))
+            return
 
         if not self.confirmUnsavedChanges("Open Project"):
             return
@@ -536,9 +563,9 @@ class SimuOMainWindow(QMainWindow):
             partPaths[source] = target
 
         self.scene.normalize_hierarchy()
-        data = {"version": 1, "objects": [],
-                "groups": [write_group(group) for group in self.scene.groups],
-                "hierarchy_order": self.scene.root_order}
+        data = project_data("scene", objects=[],
+                            groups=[write_group(group) for group in self.scene.groups],
+                            hierarchy_order=self.scene.root_order)
 
 
         for sceneObject in self.scene.objects:
@@ -559,6 +586,7 @@ class SimuOMainWindow(QMainWindow):
                 "velocity": list(sceneObject.velocity),
                 "restitution": sceneObject.restitution,
                 "body_type": sceneObject.body_type,
+                "material": sceneObject.material_override.to_dict() if sceneObject.material_override else None,
                 "acceleration": list(sceneObject.acceleration),
                 "angularVelocity": list(sceneObject.angularVelocity),
             }
@@ -590,6 +618,7 @@ class SimuOMainWindow(QMainWindow):
         self.updateWindowTitle()
 
         print("Saved project:", self.projectPath)
+        record_saved_project(self.projectPath, self.viewport)
         return True
 
     def saveAsFile(self):
@@ -1120,7 +1149,7 @@ class SimuOMainWindow(QMainWindow):
         QMessageBox.information(
             self, "SimuO Controls",
             "Import Part adds a model. Save stores your scene and its model references.\n\n"
-            "Camera: W/S forward/back, A/D left/right, Space/C up/down.\n"
+            "Camera: W/S forward/back, A/D left/right, Space/Alt up/down.\n"
             "Left/Right arrows turn the camera left/right.\n"
             "Hold the right mouse button and move the mouse to look around.\n"
             "Esc closes the editor after checking for unsaved changes.\n\n"
@@ -1277,24 +1306,30 @@ class App:
         if self.scene is None:
             self.scene = Scene()
 
-    def run(self):
+    def run(self, start_event_loop=None):
 
         # Must be configured before QApplication is created.
-        """Configure an OpenGL 3.3 core surface, create/show the scene editor, and run Qt
-        only if this App owns QApplication.
+        """Configure OpenGL, create/show the editor, and optionally run Qt's event loop.
+
+        Args:
+            start_event_loop (bool, optional): Enter ``QApplication.exec`` when true.
+                By default this happens only when this method creates the application,
+                which keeps the class usable from an existing Qt event loop.
 
         Returns:
-            int: Qt exit code, or 0 when an existing application already owns the event
-            loop.
+            int: Qt exit code, or 0 when a caller-owned event loop remains responsible.
         """
         configure_opengl()
 
         app = QApplication.instance()
 
-        ownsApp = app is None
+        owns_app = app is None
 
         if app is None:
             app = QApplication(sys.argv)
+
+        if start_event_loop is None:
+            start_event_loop = owns_app
 
 
 
@@ -1302,7 +1337,6 @@ class App:
 
         self.window.show()
 
-        if ownsApp:
+        if start_event_loop:
             return app.exec()
-
         return 0
