@@ -16,7 +16,7 @@
 | `src/simuo/project/` | Scene model, file reference resolution, and temporary imports |
 | `src/simuo/parts/` | Part validation, sketch and feature geometry, and export |
 | `src/simuo/rendering/` | Scene editor viewport, picking, selection outlines, and gizmos |
-| `src/simuo/physics/` | Bullet simulation and the separate playback viewport |
+| `src/simuo/physics/` | MuJoCo simulation and the separate playback viewport |
 | `src/simuo/resources/`, `Assets/`, `Images/` | Styles, sample models and scenes, and app images |
 | `tests/` | Unit tests, integration tests, desktop checks, and fixtures |
 | `experiments/part_playground/` | Standalone physics prototype with its own checks |
@@ -53,9 +53,9 @@ Run the suite from the repository root with the Python environment you installed
 ```
 
 On Windows, replace `.venv/bin/python` with `.\.venv\Scripts\python.exe`.
-`tests/unit` covers model and math behavior, including the Bullet solver.
+`tests/unit` covers model and math behavior, including the MuJoCo solver.
 `tests/integration` runs Qt offscreen and covers editing, persistence, and
-launcher behavior. Both suites use the normal dependencies, including PyBullet.
+launcher behavior. Both suites use the normal dependencies, including MuJoCo.
 The playground runs independently with
 `python -m unittest discover -s experiments/part_playground -v`.
 
@@ -70,7 +70,7 @@ Run desktop checks with a working graphics driver from the repository root:
 
 The headless CI jobs cover Windows and macOS. The Windows workflow also checks
 launching from a different working directory, builds the executable, and runs
-its `--help` command. Use the desktop checks to exercise interactive OpenGL.
+its headless physics check. Use the desktop checks to exercise interactive OpenGL.
 
 ## Build an executable
 

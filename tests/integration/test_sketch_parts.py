@@ -107,7 +107,7 @@ class SketchTests(unittest.TestCase):
                 self.assertAlmostEqual(world.masses[0],.1)
                 world.step(480)
                 self.assertGreater(world.scene.objects[0].position[1],.004)
-                self.assertTrue(world.bullet.getContactPoints(bodyA=world.bodies[0],physicsClientId=world.client))
+                self.assertGreater(world.data.ncon, 0)
             finally:
                 world.close()
 

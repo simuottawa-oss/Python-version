@@ -10,9 +10,13 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
 
 from simuo.parts.part_format import Part
 from simuo.parts.part_assets import PartAsset, box_vertices
-from simuo.physics.physics_world import PhysicsWorld, quaternion
+from simuo.physics.physics_world import PhysicsWorld
 from simuo.physics.viewport.renderer import OpenGLViewport
 from simuo.project.scene import Scene, SceneObject
+from simuo.project.transforms import rotation_matrix
+
+
+PLAYBACK_HINT = "Live rigid-body physics · scene copy · drag with right mouse / WASD to move the camera"
 
 
 class PhysicsRenderWindow(QMainWindow):
@@ -68,7 +72,7 @@ class PhysicsRenderWindow(QMainWindow):
         controls.addWidget(self.floor)
         controls.addStretch()
         layout.addLayout(controls)
-        self.info = QLabel("Live rigid-body physics · scene copy · drag with right mouse / WASD to move the camera")
+        self.info = QLabel(PLAYBACK_HINT)
         self.info.setWordWrap(True)
         layout.addWidget(self.info)
         self.viewport = OpenGLViewport(self,scene=self.render_scene)
@@ -117,7 +121,7 @@ class PhysicsRenderWindow(QMainWindow):
         points = []
         for obj in self.world.scene.objects:
             local = obj.asset.vertices.reshape(-1,6)[:,:3]*np.asarray(obj.scale)
-            rotation = np.asarray(self.world.bullet.getMatrixFromQuaternion(quaternion(obj.rotation))).reshape(3,3)
+            rotation = rotation_matrix(obj.rotation)
             points.extend(local @ rotation.T + np.asarray(obj.position))
         if not points:
             return
@@ -163,6 +167,7 @@ class PhysicsRenderWindow(QMainWindow):
         """
         self.set_running(False)
         self.world.reset()
+        self.info.setText(PLAYBACK_HINT)
         self.viewport.update()
         self._update_status()
 
@@ -173,9 +178,20 @@ class PhysicsRenderWindow(QMainWindow):
             None. Repaints the updated state and status.
         """
         self.set_running(False)
-        self.world.step()
-        self.viewport.update()
-        self._update_status()
+        if self._advance(1):
+            self.viewport.update()
+            self._update_status()
+
+    def _advance(self, steps):
+        """Advance the solver and keep playback paused if it reports an error."""
+        try:
+            self.world.step(steps)
+        except Exception as error:
+            self.set_running(False)
+            self.info.setText(f"Simulation stopped: {error}")
+            self._update_status()
+            return False
+        return True
 
     def change_floor(self, enabled):
         """Enable or disable floor contact, reset playback, and rebuild the visible object
@@ -212,11 +228,7 @@ class PhysicsRenderWindow(QMainWindow):
             self.accumulator += elapsed
             steps = int(self.accumulator/self.world.dt)
             if steps:
-                try:
-                    self.world.step(steps)
-                except Exception as error:
-                    self.set_running(False)
-                    self.info.setText(f"Simulation stopped: {error}")
+                if not self._advance(steps):
                     return
                 self.accumulator -= steps*self.world.dt
         self.viewport.update()
@@ -240,7 +252,7 @@ class PhysicsRenderWindow(QMainWindow):
         self.stats.setText(label + ("\n"+" | ".join(speeds[:5]) if speeds else ""))
 
     def closeEvent(self, event):
-        """Stop both timers, release uploaded scene buffers, disconnect Bullet, and accept
+        """Stop both timers, release uploaded scene buffers, close the physics world, and accept
         window closure.
 
         Args:

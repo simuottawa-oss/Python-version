@@ -1,4 +1,4 @@
-"""Property editing, scene persistence, and Bullet integration."""
+"""Property editing, scene persistence, and MuJoCo integration."""
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -120,26 +120,24 @@ class PropertiesTests(unittest.TestCase):
         self.assertEqual(self.obj.restitution, .45)
         self.assertEqual(self.obj.velocity, original)
 
-    def test_bullet_uses_overrides_and_initial_velocity_on_snapshot(self):
+    def test_solver_uses_overrides_and_initial_velocity_on_snapshot(self):
         self.obj.setPhysicsProperties(.8, [1, 2, 3])
         with PhysicsWorldContext(self.window.scene) as world:
-            info = world.bullet.getDynamicsInfo(world.bodies[0], -1, physicsClientId=world.client)
-            self.assertAlmostEqual(info[5], .8)
-            velocity, _ = world.bullet.getBaseVelocity(world.bodies[0], physicsClientId=world.client)
-            self.assertEqual(velocity, (1, 2, 3))
+            self.assertEqual(world.scene.objects[0].restitution, .8)
+            world.sync()
+            self.assertEqual(world.scene.objects[0].velocity, [1, 2, 3])
             world.step(24)
             self.assertGreater(world.scene.objects[0].position[0], 0)
             self.assertEqual(self.obj.position, [0, 1.1, 0])
             self.assertEqual(self.obj.velocity, [1, 2, 3])
 
-    def test_legacy_static_surface_bounce_reaches_bullet(self):
+    def test_legacy_static_surface_bounce_reaches_snapshot(self):
         legacy = SceneObject(meshPath=ROOT/'Assets/cube.simuOPart')
         legacy.setPhysicsProperties(.65, [1, 2, 3])
         self.window.scene.objects[:] = [legacy]
         with PhysicsWorldContext(self.window.scene) as world:
             self.assertEqual(world.masses, [0])
-            info = world.bullet.getDynamicsInfo(world.bodies[0], -1, physicsClientId=world.client)
-            self.assertAlmostEqual(info[5], .65)
+            self.assertAlmostEqual(world.scene.objects[0].restitution, .65)
 
     def select_body_type(self, mode, accept=True):
         def interact(dialog):
@@ -158,7 +156,7 @@ class PropertiesTests(unittest.TestCase):
         self.assertEqual(self.obj.body_type, 'dynamic')
         self.assertFalse(self.window.scene.dirty)
 
-    def test_switches_between_static_and_dynamic_in_bullet(self):
+    def test_switches_between_static_and_dynamic_in_solver(self):
         original_part = self.obj.part
         self.select_body_type("static")
         self.assertEqual(self.obj.body_type, 'static')

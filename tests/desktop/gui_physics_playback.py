@@ -85,11 +85,11 @@ def main():
             main_window.renderAction.trigger()
             assert len(main_window.renderWindows) == 2
             second = main_window.renderWindows[-1]
-            assert second.world.client != window.world.client
+            assert second.world.model is not window.world.model and second.world.data is not window.world.data
             second.close()
-            assert second.world.client == -1
+            assert second.world.closed
             window.close()
-            assert window.world.client == -1
+            assert window.world.closed
             assert not errors,errors
             finished = True
             print("PASS Test → Render, separate OpenGL window, automatic physics, editor isolation, pause/step/reset, gravity/floor controls, framing, independent windows, solver cleanup",flush=True)

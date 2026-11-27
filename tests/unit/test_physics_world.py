@@ -1,13 +1,18 @@
 """Rigid-body integration checks without a display or GPU."""
 from dataclasses import replace
 import math
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
 
 import numpy as np
 
 from tests import ROOT
 from simuo.project.scene import Scene, SceneObject
-from simuo.physics.physics_world import PhysicsWorld, quaternion
+from simuo.project.transforms import rotation_matrix
+from simuo.parts.part_assets import PartAsset
+from simuo.parts.sketch_geometry import Sketch, prism_vertices
+from simuo.physics.physics_world import PhysicsWorld, contact_reference
 
 
 class PhysicsTests(unittest.TestCase):
@@ -35,15 +40,47 @@ class PhysicsTests(unittest.TestCase):
         self.assertEqual(source.position,[0,2,0])
         self.assertEqual(source.velocity,[0,0,0])
 
+    def test_flat_obj_simulates_as_a_dynamic_or_kinematic_body(self):
+        with TemporaryDirectory() as folder:
+            path = Path(folder) / "plate.obj"
+            # Use a triangle on an oblique plane to exercise hull fitting with
+            # just three unique vertices and no axis-aligned normal.
+            path.write_text("v 0 0 0\nv 1 0 1\nv 0 1 1\nf 1 2 3\n", encoding="utf-8")
+            for body_type in ("dynamic", "kinematic"):
+                with self.subTest(body_type=body_type):
+                    source = SceneObject(meshPath=path)
+                    source.body_type = body_type
+                    source.velocity = [1, 0, 0]
+                    source.scale = [1, 2, .5]
+                    original_vertices = source.asset.vertices.copy()
+                    world = self.world(source, gravity=0, floor=False)
+                    world.step(48)
+                    np.testing.assert_allclose(world.scene.objects[0].position, [.2, 0, 0])
+                    np.testing.assert_array_equal(source.asset.vertices, original_vertices)
+
+    def test_flat_obj_with_large_local_offset_keeps_its_collision_position(self):
+        with TemporaryDirectory() as folder:
+            path = Path(folder) / "offset-plate.obj"
+            path.write_text("v 0 0 10000\nv 1 0 10000\nv 0 1 10000\nf 1 2 3\n",
+                            encoding="utf-8")
+            for body_type in ("static", "dynamic", "kinematic"):
+                with self.subTest(body_type=body_type):
+                    source = SceneObject(meshPath=path)
+                    source.body_type = body_type
+                    source.position = [0, 0, -10000]
+                    world = self.world(source, gravity=0, floor=False)
+                    world.step()
+                    np.testing.assert_allclose(world.data.geom_xpos[0], [1/3, 1/3, 0], atol=1e-6)
+
     def test_rotations_use_editor_convention(self):
         source = self.part(rotation=[20,35,65],angularVelocity=[0,1,0])
         world = self.world(source,gravity=0,floor=False)
-        original = np.asarray(world.bullet.getMatrixFromQuaternion(quaternion(source.rotation)))
+        original = rotation_matrix(source.rotation)
         world.sync()
-        current = np.asarray(world.bullet.getMatrixFromQuaternion(quaternion(world.scene.objects[0].rotation)))
+        current = rotation_matrix(world.scene.objects[0].rotation)
         np.testing.assert_allclose(original,current,atol=1e-8)
         world.step(48)
-        evolved = np.asarray(world.bullet.getMatrixFromQuaternion(quaternion(world.scene.objects[0].rotation)))
+        evolved = rotation_matrix(world.scene.objects[0].rotation)
         self.assertGreater(np.linalg.norm(original-evolved),.1)
 
     def test_floor_bounce_settling_and_reset(self):
@@ -81,6 +118,16 @@ class PhysicsTests(unittest.TestCase):
         world.step(480)
         self.assertLess(np.linalg.norm(world.scene.objects[0].velocity),.05)
 
+    def test_three_box_stack_remains_supported_and_settles(self):
+        objects = [self.part(position=[0, .1 + .2*i, 0]) for i in range(3)]
+        for obj in objects:
+            obj.part = replace(obj.part, restitution=0)
+        world = self.world(*objects)
+        world.step(2400)
+        for obj, height in zip(world.scene.objects, (.1, .3, .5)):
+            np.testing.assert_allclose(obj.position, [0, height, 0], atol=.005)
+            self.assertLess(np.linalg.norm(obj.velocity), .01)
+
     def test_acceleration_is_additional_to_gravity(self):
         world = self.world(self.part(acceleration=[2,9.81,0]),floor=False)
         world.step(48)
@@ -96,8 +143,8 @@ class PhysicsTests(unittest.TestCase):
         self.assertEqual(world.masses, [0])
         np.testing.assert_allclose(obj.position, [5, 2, 3])
         np.testing.assert_allclose(obj.velocity, [6, 0, 0])
-        bullet_position, _ = world.bullet.getBasePositionAndOrientation(world.bodies[0], physicsClientId=world.client)
-        np.testing.assert_allclose(bullet_position, obj.position)
+        mocap = world.model.body_mocapid[world.bodies[0]]
+        np.testing.assert_allclose(world.data.mocap_pos[mocap], obj.position)
         self.assertEqual(source.position, [1, 2, 3])
         world.reset()
         self.assertEqual(obj.position, source.position)
@@ -136,8 +183,8 @@ class PhysicsTests(unittest.TestCase):
         world = self.world(density,explicit,gravity=0,floor=False)
         self.assertAlmostEqual(world.masses[0],43.2)
         self.assertEqual(world.masses[1],1)
-        info = world.bullet.getDynamicsInfo(world.bodies[1],-1,physicsClientId=world.client)
-        np.testing.assert_allclose(info[2],[1/150,1/60,1/60])
+        inertia = world.model.body_inertia[world.bodies[1]]
+        np.testing.assert_allclose(sorted(inertia), sorted([1/150,1/60,1/60]))
 
     def test_multiple_windows_have_separate_worlds(self):
         a,b = self.world(self.part(),floor=False),self.world(self.part(),floor=False)
@@ -151,6 +198,125 @@ class PhysicsTests(unittest.TestCase):
     def test_invalid_scale_rejected(self):
         with self.assertRaises(ValueError):
             self.world(self.part(scale=[0,1,1]))
+
+    def test_live_gravity_and_floor_reset(self):
+        source = self.part(position=[0, 2, 0])
+        world = self.world(source, gravity=0, floor=False)
+        world.step(48)
+        np.testing.assert_allclose(world.scene.objects[0].position, source.position)
+        world.set_gravity(-9.81)
+        world.step(48)
+        self.assertAlmostEqual(world.scene.objects[0].velocity[1], -1.962, places=6)
+        world.floor = True
+        world.reset()
+        world.step(2400)
+        self.assertAlmostEqual(world.scene.objects[0].position[1], .1, delta=.005)
+        self.assertEqual(source.position, [0, 2, 0])
+
+    def test_close_releases_native_state_and_is_idempotent(self):
+        world = self.world(self.part())
+        world.close()
+        world.close()
+        self.assertTrue(world.closed)
+        self.assertIsNone(world.model)
+        self.assertIsNone(world.data)
+        with self.assertRaisesRegex(RuntimeError, "closed"):
+            world.step()
+
+    def test_invalid_gravity_and_step_count_do_not_advance(self):
+        world = self.world(self.part(), gravity=0)
+        for value in (float("inf"), float("nan")):
+            with self.assertRaises(ValueError):
+                world.set_gravity(value)
+        with self.assertRaises(ValueError):
+            world.step(-1)
+        with self.assertRaises(TypeError):
+            world.step(.5)
+        self.assertEqual(world.time, 0)
+        self.assertEqual(world.gravity, 0)
+
+    def test_empty_and_static_only_worlds_advance_and_reset(self):
+        for objects in ([], [self.part(body_type="static")]):
+            world = self.world(*objects)
+            world.step(24)
+            self.assertAlmostEqual(world.time, .1)
+            world.reset()
+            self.assertEqual(world.time, 0)
+
+    def test_angular_velocity_is_in_world_coordinates(self):
+        source = self.part(rotation=[20, 35, 65], angularVelocity=[.3, -.4, .5])
+        world = self.world(source, gravity=0, floor=False)
+        world.sync()
+        np.testing.assert_allclose(world.scene.objects[0].angularVelocity,
+                                   source.angularVelocity, atol=1e-10)
+
+    def test_bounce_target_changes_measured_rebound(self):
+        rebound = []
+        for bounce in (0, .45, .8):
+            obj = self.part(position=[0, 1.1, 0])
+            obj.restitution = bounce
+            world = self.world(obj)
+            upward = 0
+            for _ in range(240):
+                world.step()
+                # Soft-contact recovery below the surface is not a rebound.
+                if world.scene.objects[0].position[1] > .105:
+                    upward = max(upward, world.scene.objects[0].velocity[1])
+            rebound.append(upward)
+        self.assertLess(rebound[0], .1)
+        self.assertGreater(rebound[1], 1)
+        self.assertGreater(rebound[2], rebound[1] + .5)
+
+    def test_contact_materials_use_both_surfaces(self):
+        a = self.part(position=[-.1, 0, 0])
+        b = self.part(position=[.1, 0, 0])
+        a.part = replace(a.part, friction=.4)
+        b.part = replace(b.part, friction=.5)
+        a.restitution, b.restitution = .8, .5
+        world = self.world(a, b, gravity=0, floor=False)
+        # Inspect the generated MuJoCo contacts, not just the copied scene settings.
+        world.step()
+        self.assertGreater(world.data.ncon, 0)
+        contact = world.data.contact[0]
+        np.testing.assert_allclose(contact.friction[:2], [.2, .2])
+        np.testing.assert_allclose(contact.solref, contact_reference(.4))
+
+    def test_static_concave_mesh_does_not_fill_open_notch(self):
+        # An L-shaped prism has an empty notch inside its overall convex hull.
+        sketch = Sketch([[0, 0], [2, 0], [2, .4], [.4, .4], [.4, 2], [0, 2]],
+                        True, [None]*6, .2)
+        surface = SceneObject()
+        surface.asset = PartAsset(prism_vertices(sketch))
+        surface.body_type = "static"
+        cube = self.part(position=[0, 0, 1], velocity=[0, 0, -1])
+        supported = self.part(position=[.7, -.45, 1], velocity=[0, 0, -1])
+        world = self.world(surface, cube, supported, gravity=0, floor=False)
+        world.step(480)
+        np.testing.assert_allclose(world.scene.objects[1].position, [0, 0, -1], atol=.005)
+        self.assertGreater(world.scene.objects[2].position[2], .18)
+
+    def test_kinematic_surface_transfers_tangential_velocity(self):
+        platform = self.part(position=[0, -.1, 0], scale=[20, 1, 20],
+                             velocity=[.5, 0, 0], body_type="kinematic")
+        block = self.part(position=[0, .1, 0])
+        platform.restitution = block.restitution = 0
+        world = self.world(platform, block, floor=False)
+        world.step(240)
+        self.assertGreater(world.scene.objects[1].velocity[0], .3)
+        self.assertGreater(world.scene.objects[1].position[0], .1)
+        np.testing.assert_allclose(world.scene.objects[0].position, [.5, -.1, 0], atol=1e-10)
+
+    def test_accelerating_kinematic_platform_supports_dynamic_body(self):
+        platform = self.part(position=[0, -.1, 0], scale=[20, 1, 20],
+                             acceleration=[0, 1, 0], body_type="kinematic")
+        block = self.part(position=[0, .1, 0])
+        platform.restitution = block.restitution = 0
+        world = self.world(platform, block, floor=False)
+        world.step(240)
+        moving, supported = world.scene.objects
+        np.testing.assert_allclose(moving.position, [0, .4, 0], atol=1e-10)
+        np.testing.assert_allclose(supported.position, [0, .6, 0], atol=.005)
+        np.testing.assert_allclose(supported.velocity, [0, 1, 0], atol=.01)
 
 
 if __name__ == "__main__":

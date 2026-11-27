@@ -111,7 +111,10 @@ def main():
     parser.add_argument("project", nargs="?", help=".simuO scene or .simuOPart to open")
     parser.add_argument("--new", action="store_true", help="open a new scene directly")
     parser.add_argument("--part-editor", action="store_true", help="open the part sketch editor (optionally supply a .simuOPart)")
+    parser.add_argument("--check-physics", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.check_physics:
+        return check_physics()
     if args.part_editor:
         action,filepath = "open_part" if args.project else "new_part",args.project
     elif args.project and Path(args.project).suffix.lower()==".simuopart":
@@ -140,3 +143,25 @@ def main():
 
         app = App(projectPath=filepath)
     return app.run()
+
+
+def check_physics():
+    """Exercise the bundled part loader and native solver without opening a window."""
+    from simuo.physics.physics_world import PhysicsWorld
+    from simuo.project.scene import Scene, SceneObject
+
+    scene = Scene()
+    part = SceneObject(meshPath=resource_path("Assets", "aluminum_cube.simuOPart"))
+    part.body_type = "dynamic"
+    part.velocity = [0, 0, 0]
+    scene.addObject(part)
+    world = PhysicsWorld(scene, floor=False)
+    try:
+        world.step()
+        velocity = world.scene.objects[0].velocity[1]
+        if abs(velocity - world.gravity * world.dt) <= 1e-6:
+            return 0
+        print(f"Physics check failed: unexpected vertical velocity {velocity}", file=sys.stderr)
+        return 1
+    finally:
+        world.close()

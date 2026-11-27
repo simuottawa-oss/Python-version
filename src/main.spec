@@ -1,19 +1,22 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_all, collect_data_files
+
+# Include the engine library, plugins, and dynamically imported native bindings.
+mujoco_datas, mujoco_binaries, mujoco_hiddenimports = collect_all("mujoco")
 
 project_root = Path(SPECPATH).resolve().parent
 
 a = Analysis(
     [str(project_root / 'src' / 'main.py')],
     pathex=[str(project_root / 'src')],
-    binaries=[],
+    binaries=mujoco_binaries,
     datas=[(str(project_root / 'Images'), 'Images'),
            (str(project_root / 'Assets'), 'Assets'),
-           (str(project_root / 'src/simuo/resources/styles'), 'simuo/resources/styles')] + collect_data_files('customtkinter'),
+           (str(project_root / 'src/simuo/resources/styles'), 'simuo/resources/styles')] + collect_data_files('customtkinter') + mujoco_datas,
     # Pillow's compiled Tk bridge imports its locator dynamically.
-    hiddenimports=['PIL._imagingtk', 'PIL._tkinter_finder'],
+    hiddenimports=['PIL._imagingtk', 'PIL._tkinter_finder'] + mujoco_hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
